@@ -1,7 +1,7 @@
 # 🔐 Solana Message Signer – Secure Account Ownership Verification  
 
 ## **Overview**  
-Solana Message Signer is a **web application** that allows users to **sign custom messages** using their **Solana wallets** (Phantom, Solflare, Backpack, Trust Wallet, Atomic Wallet, MetaMask, Glow, Exodus). This signature serves as **proof of account ownership**, enabling secure authentication without passwords.  
+Solana Message Signer is a **web application** that allows users to **sign custom messages** using their **Solana wallets** (Phantom, Solflare, Backpack, Trust Wallet, Atomic Wallet, Glow, Exodus). This signature serves as **proof of account ownership**, enabling secure authentication without passwords.  
 
 ## **Features**  
 ✅ **Sign custom messages** securely with supported Solana wallets  
