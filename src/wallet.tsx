@@ -14,15 +14,11 @@ import {
 } from "@solana/wallet-adapter-wallets";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 
-/**
- * Utilise VITE_SOLANA_RPC si défini, sinon mainnet public.
- * Tu peux mettre ton RPC privé (Helius, Triton, etc.) dans .env:
- * VITE_SOLANA_RPC=https://...
- */
 const endpoint =
   import.meta.env.VITE_SOLANA_RPC || clusterApiUrl("mainnet-beta");
 
 export const WalletKit: FC<{ children: ReactNode }> = ({ children }) => {
+  // Les adapters gèrent extensions, in-app (dApp browser) et deep-links mobiles quand c’est supporté.
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),
