@@ -1,7 +1,7 @@
 import { useState } from "react";
 import bs58 from "bs58";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { WalletPicker, WalletChoice } from "./components/WalletPicker";
+import { WalletPicker, WalletChoice } from "./WalletPicker";
 
 /* ---------- Icônes inline ---------- */
 function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
