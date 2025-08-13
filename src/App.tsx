@@ -1,7 +1,7 @@
 import { useState } from "react";
 import bs58 from "bs58";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 /* ---------- Icônes inline (pas de dépendances externes) ---------- */
 function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -93,6 +93,7 @@ function MobileActionBar({
 /* ---------- App ---------- */
 export default function App() {
   const { connected, publicKey, signMessage } = useWallet();
+  const { setVisible } = useWalletModal(); // ouvre le modal multi-wallet
 
   const [msg, setMsg] = useState(
     "I am proving I own this wallet on " + new Date().toISOString()
@@ -101,10 +102,14 @@ export default function App() {
   const [busy, setBusy] = useState(false);
 
   const disabled = !connected || !msg.trim() || busy;
+  const shortKey = publicKey?.toBase58();
+
+  const openWalletModal = () => setVisible(true);
 
   const sign = async () => {
     if (!connected || !signMessage) {
-      alert("Connect a wallet that supports message signing.");
+      // Si aucun wallet n'est connecté, on ouvre directement le modal
+      setVisible(true);
       return;
     }
     setBusy(true);
@@ -120,8 +125,6 @@ export default function App() {
       setBusy(false);
     }
   };
-
-  const shortKey = publicKey?.toBase58();
 
   return (
     <div className="min-h-screen relative overflow-hidden">
@@ -146,6 +149,7 @@ export default function App() {
             </div>
           </a>
 
+          {/* ----- BOUTON CUSTOM : ouvre le modal multi-wallet ----- */}
           <div className="flex items-center gap-3 w-full max-w-[60%] justify-end">
             {connected && shortKey ? (
               <span className="max-w-[40vw] truncate text-xs rounded-full bg-emerald-400/10 border border-emerald-400/30 px-3 py-1 text-emerald-300">
@@ -153,8 +157,13 @@ export default function App() {
               </span>
             ) : null}
 
-            {/* Wallet adapter multi-wallet button */}
-            <WalletMultiButton className="w-full md:w-auto rounded-xl !bg-sky-500 !text-sky-950 hover:!bg-sky-400 shadow-glow !h-auto !py-3 !px-4 !text-sm" />
+            <button
+              onClick={openWalletModal}
+              className="w-full md:w-auto rounded-xl px-4 py-3 text-sm font-medium bg-sky-500 text-sky-950 hover:bg-sky-400 transition shadow-glow"
+              title={connected ? "Change wallet" : "Connect wallet"}
+            >
+              {connected ? "Change wallet" : "Connect wallet"}
+            </button>
           </div>
         </div>
       </header>
