@@ -18,20 +18,14 @@ export const WALLETS: WalletInfo[] = [
     detect: () =>
       (window.phantom?.solana && window.phantom.solana.isPhantom) ||
       (window.solana?.isPhantom ? window.solana : null),
-    openInstall: () => {
-      const url = isMobile ? "https://phantom.app/" : "https://phantom.app/download";
-      window.open(url, "_blank");
-    },
+    openInstall: () => window.open(isMobile ? "https://phantom.app/" : "https://phantom.app/download", "_blank"),
   },
   {
     id: "solflare",
     label: "Solflare",
     icon: "https://solflare.com/favicon-32x32.png",
     detect: () => window.solflare ?? null,
-    openInstall: () => {
-      const url = isMobile ? "https://solflare.com/" : "https://solflare.com/download";
-      window.open(url, "_blank");
-    },
+    openInstall: () => window.open(isMobile ? "https://solflare.com/" : "https://solflare.com/download", "_blank"),
   },
   {
     id: "glow",
