@@ -62,7 +62,9 @@ export const WALLETS: WalletInfo[] = [
   },
 ];
 
-export async function connectWalletById(id: WalletId): Promise<{ provider: any; publicKey: string } | null> {
+export async function connectWalletById(
+  id: WalletId
+): Promise<{ provider: any; publicKey: string } | null> {
   const w = WALLETS.find((x) => x.id === id)!;
   const provider = w.detect();
   if (!provider) {
@@ -72,9 +74,11 @@ export async function connectWalletById(id: WalletId): Promise<{ provider: any; 
   const resp = await provider.connect?.({ onlyIfTrusted: false });
   const pk = (resp as any)?.publicKey ?? provider.publicKey;
   const pubkey =
-    typeof pk?.toBase58 === "function" ? pk.toBase58() :
-    typeof pk?.toString === "function" ? pk.toString() :
-    String(pk);
+    typeof pk?.toBase58 === "function"
+      ? pk.toBase58()
+      : typeof pk?.toString === "function"
+      ? pk.toString()
+      : String(pk);
   return { provider, publicKey: pubkey };
 }
 
