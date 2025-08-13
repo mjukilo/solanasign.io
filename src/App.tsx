@@ -1,14 +1,39 @@
 import { useState } from "react";
 import bs58 from "bs58";
-import { useWallet } from "@solana/wallet-adapter-react";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
+import { WalletPicker } from "./WalletPicker";
+import { connectWalletById, disconnectProvider, WalletId } from "./wallets";
 
-/* Icônes inline — inchangées comme précédemment */
-function CheckIcon(props: React.SVGProps<SVGSVGElement>) { /* … */ }
-function ClipboardIcon(props: React.SVGProps<SVGSVGElement>) { /* … */ }
-function ExternalIcon(props: React.SVGProps<SVGSVGElement>) { /* … */ }
-function LogoMark(props: React.SVGProps<SVGSVGElement>) { /* … */ }
+/* --- Icônes inline --- */
+function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
+      <path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" />
+    </svg>
+  );
+}
+function ClipboardIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
+      <path fill="currentColor" d="M16 4h-1a2 2 0 0 0-4 0H10a2 2 0 0 0-2 2v1H7a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1V6a2 2 0 0 0-2-2zm-3 0a1 1 0 0 1 1 1v1h-2V5a1 1 0 0 1 1-1z" />
+    </svg>
+  );
+}
+function ExternalIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
+      <path fill="currentColor" d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3zM5 5h6v2H7v10h10v-4h2v6H5V5z" />
+    </svg>
+  );
+}
+function LogoMark(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
+      <path fill="currentColor" d="M4 7h16l-2 4H6l-2-4zm2 6h12l-2 4H8l-2-4z" />
+    </svg>
+  );
+}
 
+/* --- UI utils --- */
 function Copy({ text }: { text: string }) {
   const [ok, setOk] = useState(false);
   return (
@@ -20,13 +45,13 @@ function Copy({ text }: { text: string }) {
         setTimeout(() => setOk(false), 1200);
       }}
       className="inline-flex items-center gap-2 rounded-xl border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-sm hover:bg-slate-800 transition"
+      title="Copy to clipboard"
     >
       <ClipboardIcon className="h-4 w-4" />
       {ok ? "Copied!" : "Copy"}
     </button>
   );
 }
-
 function MobileActionBar({ disabled, onSign }: { disabled: boolean; onSign: () => void }) {
   return (
     <div
@@ -38,9 +63,7 @@ function MobileActionBar({ disabled, onSign }: { disabled: boolean; onSign: () =
           onClick={onSign}
           disabled={disabled}
           className={`w-full rounded-xl px-4 py-3 text-sm font-semibold transition ${
-            disabled
-              ? "bg-slate-700 text-slate-400 cursor-not-allowed"
-              : "bg-sky-500 text-sky-950 hover:bg-sky-400"
+            disabled ? "bg-slate-700 text-slate-400 cursor-not-allowed" : "bg-sky-500 text-sky-950 hover:bg-sky-400"
           }`}
         >
           {disabled ? "Ready to sign…" : "Sign message"}
@@ -50,37 +73,65 @@ function MobileActionBar({ disabled, onSign }: { disabled: boolean; onSign: () =
   );
 }
 
+/* --- App (custom modal flow) --- */
 export default function App() {
-  const { connected, publicKey, signMessage } = useWallet();
-  const { setVisible } = useWalletModal(); // clé pour ouvrir le modal
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [connectedWith, setConnectedWith] = useState<WalletId | null>(null);
+  const [provider, setProvider] = useState<any>(null);
+  const [pubkey, setPubkey] = useState<string | null>(null);
 
   const [msg, setMsg] = useState("I am proving I own this wallet on " + new Date().toISOString());
   const [sig, setSig] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const connected = !!provider && !!pubkey;
   const disabled = !connected || !msg.trim() || busy;
-  const shortKey = publicKey?.toBase58();
+  const shortKey = pubkey ?? undefined;
 
-  const openWalletModal = () => setVisible(true);
+  async function handlePick(id: WalletId) {
+    try {
+      const res = await connectWalletById(id);
+      if (!res) return; // redirigé vers install
+      setProvider(res.provider);
+      setPubkey(res.publicKey);
+      setConnectedWith(id);
+      setPickerOpen(false);
+    } catch {
+      // ignore
+    }
+  }
 
-  const sign = async () => {
-    if (!connected || !signMessage) {
-      setVisible(true);
+  async function disconnect() {
+    await disconnectProvider(provider);
+    setProvider(null);
+    setPubkey(null);
+    setConnectedWith(null);
+  }
+
+  async function sign() {
+    if (!connected) {
+      setPickerOpen(true);
+      return;
+    }
+    if (!provider?.signMessage) {
+      alert("Ce wallet ne supporte pas signMessage.");
       return;
     }
     setBusy(true);
     setSig(null);
     try {
       const encoded = new TextEncoder().encode(msg);
-      const raw = await signMessage(encoded);
+      // certains wallets renvoient directement Uint8Array, d'autres { signature }
+      const res: any = await provider.signMessage(encoded, "utf8").catch(() => provider.signMessage(encoded));
+      const raw: Uint8Array = res?.signature ?? res;
       setSig(bs58.encode(raw));
-    } catch (err) {
-      console.error(err);
-      alert("Signature cancelled or failed.");
+    } catch (e) {
+      console.error(e);
+      alert("Signature annulée ou échouée.");
     } finally {
       setBusy(false);
     }
-  };
+  }
 
   return (
     <div className="min-h-screen relative overflow-hidden">
@@ -110,25 +161,34 @@ export default function App() {
               </span>
             )}
 
-            <button
-              onClick={openWalletModal}
-              className="w-full md:w-auto rounded-xl px-4 py-3 text-sm font-medium bg-sky-500 text-sky-950 hover:bg-sky-400 transition shadow-glow"
-              title={connected ? "Change wallet" : "Connect wallet"}
-            >
-              {connected ? "Change wallet" : "Connect wallet"}
-            </button>
+            {!connected ? (
+              <button
+                onClick={() => setPickerOpen(true)}
+                className="w-full md:w-auto rounded-xl px-4 py-3 text-sm font-medium bg-sky-500 text-sky-950 hover:bg-sky-400 transition shadow-glow"
+              >
+                Connect wallet
+              </button>
+            ) : (
+              <button
+                onClick={disconnect}
+                className="w-full md:w-auto rounded-xl px-4 py-3 text-sm font-medium bg-slate-700 text-slate-200 hover:bg-slate-600 transition"
+              >
+                Disconnect
+              </button>
+            )}
           </div>
         </div>
       </header>
 
-      {/* Main content */}
+      {/* Main */}
       <main className="relative z-10">
         <section className="mx-auto max-w-6xl px-4 sm:px-6 py-10 md:py-16">
           <div className="grid md:grid-cols-2 gap-6 md:gap-8 items-stretch">
-            {/* Left panel */}
+            {/* Left column */}
             <div className="flex flex-col justify-center">
               <h1 className="text-3xl md:text-5xl font-semibold tracking-tight">
-                Prove wallet ownership<br />
+                Prove wallet ownership
+                <br />
                 <span className="text-sky-400">by signing a message</span>.
               </h1>
               <p className="mt-4 text-slate-300/90 leading-relaxed">
@@ -151,11 +211,9 @@ export default function App() {
               </ul>
             </div>
 
-            {/* Right panel – signature card */}
+            {/* Card */}
             <div className="rounded-2xl border border-slate-700/60 bg-slate-900/50 backdrop-blur p-4 sm:p-8 shadow-glow">
-              <label className="block text-sm font-medium text-slate-300">
-                Message to sign
-              </label>
+              <label className="block text-sm font-medium text-slate-300">Message to sign</label>
               <textarea
                 value={msg}
                 onChange={(e) => setMsg(e.target.value)}
@@ -166,16 +224,12 @@ export default function App() {
               />
 
               <div className="mt-4 flex flex-col md:flex-row items-center gap-3 md:gap-4 justify-between">
-                <p className="text-xs text-slate-400 self-start">
-                  Tip: include a timestamp & domain to avoid replay.
-                </p>
+                <p className="text-xs text-slate-400 self-start">Tip: include a timestamp & domain to avoid replay.</p>
                 <button
                   onClick={sign}
                   disabled={disabled}
                   className={`w-full md:w-auto rounded-xl px-4 py-3 text-sm font-semibold transition shadow-glow ${
-                    disabled
-                      ? "bg-slate-700 text-slate-400 cursor-not-allowed"
-                      : "bg-sky-500 text-sky-950 hover:bg-sky-400"
+                    disabled ? "bg-slate-700 text-slate-400 cursor-not-allowed" : "bg-sky-500 text-sky-950 hover:bg-sky-400"
                   }`}
                 >
                   {busy ? "Signing…" : "Sign message"}
@@ -184,24 +238,24 @@ export default function App() {
 
               {sig && (
                 <div className="mt-6">
-                  <label className="block text-sm font-medium text-slate-300">
-                    Signature (bs58)
-                  </label>
+                  <label className="block text-sm font-medium text-slate-300">Signature (bs58)</label>
                   <div className="mt-2 rounded-xl border border-slate-700/60 bg-slate-800/60 p-3 text-xs break-all">
                     {sig}
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     <Copy text={sig} />
-                    <a
-                      aria-label="Open wallet in Solana Explorer"
-                      href={`https://explorer.solana.com/address/${shortKey ?? ""}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 text-sm underline decoration-dotted hover:opacity-90"
-                    >
-                      <ExternalIcon className="h-4 w-4" />
-                      View wallet on Explorer
-                    </a>
+                    {shortKey && (
+                      <a
+                        aria-label="Open wallet in Solana Explorer"
+                        href={`https://explorer.solana.com/address/${shortKey}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 text-sm underline decoration-dotted hover:opacity-90"
+                      >
+                        <ExternalIcon className="h-4 w-4" />
+                        View wallet on Explorer
+                      </a>
+                    )}
                   </div>
 
                   <details className="mt-4 group">
@@ -209,15 +263,8 @@ export default function App() {
                       How to verify this signature
                     </summary>
                     <div className="mt-3 text-sm text-slate-300/80 space-y-2">
-                      <p>
-                        Use <code>tweetnacl</code> or <code>@solana/web3.js</code>{" "}
-                        to verify the signature bytes over the exact same
-                        message, using the wallet public key.
-                      </p>
-                      <p className="text-slate-400">
-                        Make sure the verifier encodes the message as UTF-8 and
-                        decodes the signature from base58.
-                      </p>
+                      <p>Use <code>tweetnacl</code> or <code>@solana/web3.js</code> to verify the signature bytes over the exact same message, using the wallet public key.</p>
+                      <p className="text-slate-400">Make sure the verifier encodes the message as UTF-8 and decodes the signature from base58.</p>
                     </div>
                   </details>
                 </div>
@@ -227,9 +274,7 @@ export default function App() {
         </section>
 
         {/* Mobile bottom action bar */}
-        {connected && msg.trim().length > 0 && (
-          <MobileActionBar disabled={disabled} onSign={sign} />
-        )}
+        {connected && msg.trim().length > 0 && <MobileActionBar disabled={disabled} onSign={sign} />}
       </main>
 
       {/* Footer */}
@@ -237,9 +282,7 @@ export default function App() {
         <div className="mx-auto max-w-6xl px-4 sm:px-6 py-4 sm:py-6 text-sm text-slate-400 flex flex-wrap items-center justify-between gap-3">
           <span>© {new Date().getFullYear()} SolanaSign</span>
           <div className="flex items-center gap-4">
-            <a className="hover:text-slate-200" href="https://github.com/mjukilo/solanasign.io">
-              GitHub
-            </a>
+            <a className="hover:text-slate-200" href="https://github.com/mjukilo/solanasign.io">GitHub</a>
             <button
               onClick={() => document.documentElement.classList.toggle("dark")}
               className="rounded-xl border border-slate-700/60 px-3 py-1"
@@ -250,6 +293,9 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* Modal */}
+      <WalletPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={handlePick} />
     </div>
   );
 }
