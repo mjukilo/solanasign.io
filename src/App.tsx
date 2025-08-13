@@ -67,16 +67,17 @@ export default function App() {
   const disabled = !connected || !msg.trim() || busy;
   const shortKey = pubkey ?? undefined;
 
-  // ====== DIALOG NATIF (comme ton HTML) ======
+  // ===== DIALOG NATIF (comme ton HTML) =====
   const pickerRef = useRef<HTMLDialogElement>(null);
 
+  // <-- C’est ça “open picker” : on ouvre le <dialog> natif
   const openPicker = () => {
-    console.log("open picker"); // debug
+    console.log("open picker"); // debug (optionnel)
     pickerRef.current?.showModal();
   };
   const closePicker = () => pickerRef.current?.close();
 
-  // click en dehors pour fermer (comme ton HTML)
+  // clic en dehors pour fermer (même UX que ton HTML)
   useEffect(() => {
     const dlg = pickerRef.current;
     if (!dlg) return;
@@ -90,17 +91,16 @@ export default function App() {
     return () => dlg.removeEventListener("click", onClick);
   }, []);
 
-  // CHOIX D’UN WALLET
+  // CHOISIR UN WALLET DANS LE MODAL
   async function pickWallet(id: WalletId) {
     closePicker();
     try {
       const res = await connectWalletById(id);
-      if (!res) return; // redirection vers install
+      if (!res) return; // redirection install si non détecté
       setProvider(res.provider);
       setPubkey(res.publicKey);
-    } catch (e) {
-      console.error(e);
-      // feedback minimal : rien si l’utilisateur annule
+    } catch {
+      /* utilisateur a annulé : pas d'alerte */
     }
   }
 
@@ -112,7 +112,7 @@ export default function App() {
 
   async function sign() {
     if (!connected) {
-      openPicker();
+      openPicker(); // invite à se connecter
       return;
     }
     if (!provider?.signMessage) {
@@ -263,10 +263,8 @@ export default function App() {
           </div>
         </section>
 
-        {/* Mobile bottom action bar */}
-        {connected && msg.trim().length > 0 && (
-          <MobileActionBar disabled={disabled} onSign={sign} />
-        )}
+        {/* Barre d’action mobile */}
+        {connected && msg.trim().length > 0 && <MobileActionBar disabled={disabled} onSign={sign} />}
       </main>
 
       {/* Footer */}
@@ -286,13 +284,11 @@ export default function App() {
         </div>
       </footer>
 
-      {/* ===== Dialog natif comme dans ton HTML ===== */}
+      {/* ===== <dialog> natif (même UX que ton HTML) ===== */}
       <dialog id="picker" ref={pickerRef}>
         <div className="dlg-hd" style={{padding:"16px 20px", borderBottom:"1px solid #1d2942", fontWeight:700}}>Choisir un wallet</div>
         <div className="dlg-bd" style={{padding:"12px"}}>
           <div className="grid" style={{display:"grid", gap:6, gridTemplateColumns:"1fr"}}>
-            {/* 2 colonnes si largeur >= 420px */}
-            {/* On mappe la liste pour rester DRY */}
             {WALLETS.map((w) => (
               <div
                 key={w.id}
