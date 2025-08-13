@@ -9,6 +9,14 @@
     "preview": "vite preview --host"
   },
   "dependencies": {
+    "@solana/web3.js": "1.95.3",
+    "@solana/wallet-adapter-react": "0.15.32",
+    "@solana/wallet-adapter-wallets": "0.19.18",
+    "@solana/wallet-adapter-phantom": "0.9.29",
+    "@solana/wallet-adapter-solflare": "0.9.29",
+    "@solana/wallet-adapter-backpack": "0.9.29",
+    "@solana/wallet-adapter-glow": "0.9.29",
+    "@solana/wallet-adapter-exodus": "0.9.29",
     "bs58": "^6.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
