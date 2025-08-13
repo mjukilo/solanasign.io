@@ -32,7 +32,7 @@ export const WALLETS: WalletInfo[] = [
     label: "Glow",
     icon: "https://glow.app/favicon-32x32.png",
     detect: () => {
-      const p = window.glow?.solana || window.solana;
+      const p = (window as any).glow?.solana || window.solana;
       return p && (p.isGlow || (p as any)?.provider === "Glow") ? p : null;
     },
     openInstall: () => window.open("https://glow.app/download", "_blank"),
@@ -42,7 +42,7 @@ export const WALLETS: WalletInfo[] = [
     label: "Exodus",
     icon: "https://www.exodus.com/assets/favicon-32x32.png",
     detect: () => {
-      const p = window.exodus?.solana || window.solana;
+      const p = (window as any).exodus?.solana || window.solana;
       return p && (p.isExodus || (p as any)?.provider === "Exodus") ? p : null;
     },
     openInstall: () => window.open("https://www.exodus.com/download/", "_blank"),
@@ -51,7 +51,7 @@ export const WALLETS: WalletInfo[] = [
     id: "backpack",
     label: "Backpack",
     icon: "https://backpack.app/favicon-32x32.png",
-    detect: () => window.backpack?.solana || (window.solana?.isBackpack ? window.solana : null),
+    detect: () => (window as any).backpack?.solana || (window.solana?.isBackpack ? window.solana : null),
     openInstall: () => window.open("https://backpack.app/download", "_blank"),
   },
 ];
@@ -67,19 +67,15 @@ export async function connectWalletById(
   }
   const resp = await provider.connect?.({ onlyIfTrusted: false });
   const pk = (resp as any)?.publicKey ?? provider.publicKey;
-  const pubkey =
+  const publicKey =
     typeof pk?.toBase58 === "function"
       ? pk.toBase58()
       : typeof pk?.toString === "function"
       ? pk.toString()
       : String(pk);
-  return { provider, publicKey: pubkey };
+  return { provider, publicKey };
 }
 
 export async function disconnectProvider(provider: any) {
-  try {
-    await provider?.disconnect?.();
-  } catch (e) {
-    console.warn("disconnect error:", e);
-  }
+  try { await provider?.disconnect?.(); } catch (e) { console.warn("disconnect error:", e); }
 }
