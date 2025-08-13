@@ -11,6 +11,8 @@ interface SolanaLikeProvider {
   disconnect?: () => Promise<void> | void;
   publicKey?: PubKeyLike | null;
   signMessage?: (message: Uint8Array, display?: any) => Promise<Uint8Array | { signature: Uint8Array }>;
+  isConnected?: boolean;
+  connected?: boolean;
 }
 
 declare global {
