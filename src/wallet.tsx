@@ -1,4 +1,4 @@
-export type WalletId = "phantom" | "solflare" | "backpack" | "glow" | "exodus";
+export type WalletId = "phantom" | "solflare" | "glow" | "exodus" | "backpack";
 
 export type WalletInfo = {
   id: WalletId;
@@ -15,7 +15,9 @@ export const WALLETS: WalletInfo[] = [
     id: "phantom",
     label: "Phantom",
     icon: "https://assets.phantom.app/phantom-logo.png",
-    detect: () => (window.phantom?.solana && window.phantom.solana.isPhantom) || (window.solana?.isPhantom ? window.solana : null),
+    detect: () =>
+      (window.phantom?.solana && window.phantom.solana.isPhantom) ||
+      (window.solana?.isPhantom ? window.solana : null),
     openInstall: () => {
       const url = isMobile ? "https://phantom.app/" : "https://phantom.app/download";
       window.open(url, "_blank");
@@ -32,31 +34,31 @@ export const WALLETS: WalletInfo[] = [
     },
   },
   {
-    id: "backpack",
-    label: "Backpack",
-    icon: "https://backpack.app/favicon-32x32.png",
-    detect: () => window.backpack?.solana || (window.solana?.isBackpack ? window.solana : null),
-    openInstall: () => {
-      window.open("https://backpack.app/download", "_blank");
-    },
-  },
-  {
     id: "glow",
     label: "Glow",
     icon: "https://glow.app/favicon-32x32.png",
-    detect: () => window.glow?.solana || (window.solana?.isGlow ? window.solana : null),
-    openInstall: () => {
-      window.open("https://glow.app", "_blank");
+    detect: () => {
+      const p = window.glow?.solana || window.solana;
+      return p && (p.isGlow || (p as any)?.provider === "Glow") ? p : null;
     },
+    openInstall: () => window.open("https://glow.app/download", "_blank"),
   },
   {
     id: "exodus",
     label: "Exodus",
     icon: "https://www.exodus.com/assets/favicon-32x32.png",
-    detect: () => window.exodus?.solana || (window.solana?.isExodus ? window.solana : null),
-    openInstall: () => {
-      window.open("https://www.exodus.com/download/", "_blank");
+    detect: () => {
+      const p = window.exodus?.solana || window.solana;
+      return p && (p.isExodus || (p as any)?.provider === "Exodus") ? p : null;
     },
+    openInstall: () => window.open("https://www.exodus.com/download/", "_blank"),
+  },
+  {
+    id: "backpack",
+    label: "Backpack",
+    icon: "https://backpack.app/favicon-32x32.png",
+    detect: () => window.backpack?.solana || (window.solana?.isBackpack ? window.solana : null),
+    openInstall: () => window.open("https://backpack.app/download", "_blank"),
   },
 ];
 
@@ -67,15 +69,13 @@ export async function connectWalletById(id: WalletId): Promise<{ provider: any; 
     w.openInstall();
     return null;
   }
-  try {
-    const resp = await provider.connect({ onlyIfTrusted: false });
-    const pk = resp?.publicKey ?? provider.publicKey;
-    const pubkey = typeof pk?.toBase58 === "function" ? pk.toBase58() : typeof pk?.toString === "function" ? pk.toString() : String(pk);
-    return { provider, publicKey: pubkey };
-  } catch (e) {
-    console.error(`[connect:${id}]`, e);
-    throw e;
-  }
+  const resp = await provider.connect?.({ onlyIfTrusted: false });
+  const pk = (resp as any)?.publicKey ?? provider.publicKey;
+  const pubkey =
+    typeof pk?.toBase58 === "function" ? pk.toBase58() :
+    typeof pk?.toString === "function" ? pk.toString() :
+    String(pk);
+  return { provider, publicKey: pubkey };
 }
 
 export async function disconnectProvider(provider: any) {
