@@ -56,6 +56,48 @@ function MobileActionBar({ disabled, onSign }: { disabled: boolean; onSign: () =
   );
 }
 
+/* === Fallback Modal React (si <dialog> indisponible) === */
+function PickerOverlay({
+  open,
+  onClose,
+  onPick,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onPick: (id: WalletId) => void;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60" />
+      <div
+        className="relative mx-auto mt-24 w-[92%] max-w-md rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="border-b border-slate-800 px-5 py-4 text-sm font-semibold">Choisir un wallet</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3">
+          {WALLETS.map((w) => (
+            <button
+              key={w.id}
+              onClick={() => onPick(w.id)}
+              className="flex items-center gap-3 rounded-xl border border-slate-700/70 bg-slate-800/50 px-3 py-3 text-left hover:bg-slate-800 transition"
+            >
+              <img src={w.icon} alt={w.label} className="h-7 w-7 rounded-md object-cover" />
+              <div>
+                <div className="text-sm font-medium">{w.label}</div>
+                <div className="text-xs text-slate-400">Extension / App mobile</div>
+              </div>
+            </button>
+          ))}
+        </div>
+        <div className="px-5 pb-4 pt-2 text-xs text-slate-400">
+          Astuce mobile : ouvrez cette page dans le navigateur intégré de votre wallet.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   // ÉTATS
   const [provider, setProvider] = useState<any>(null);
@@ -63,35 +105,51 @@ export default function App() {
   const [msg, setMsg] = useState("I am proving I own this wallet on " + new Date().toISOString());
   const [sig, setSig] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
   const connected = !!provider && !!pubkey;
   const disabled = !connected || !msg.trim() || busy;
   const shortKey = pubkey ?? undefined;
 
-  // ===== DIALOG NATIF (comme ton HTML) =====
+  // ===== Dialog natif + fallback overlay =====
   const pickerRef = useRef<HTMLDialogElement>(null);
+  const [fallbackOpen, setFallbackOpen] = useState(false);
 
-  // <-- C’est ça “open picker” : on ouvre le <dialog> natif
   const openPicker = () => {
-    console.log("open picker"); // debug (optionnel)
-    pickerRef.current?.showModal();
+    try {
+      const dlg = pickerRef.current as any;
+      if (dlg && typeof dlg.showModal === "function") {
+        dlg.showModal();
+      } else {
+        // pas de support <dialog> → fallback React
+        setFallbackOpen(true);
+      }
+    } catch (err) {
+      // showModal peut throw si déjà ouvert / pas attaché au DOM / etc.
+      console.warn("showModal failed, using fallback overlay:", err);
+      setFallbackOpen(true);
+    }
   };
-  const closePicker = () => pickerRef.current?.close();
+  const closePicker = () => {
+    try {
+      pickerRef.current?.close();
+    } catch {}
+    setFallbackOpen(false);
+  };
 
-  // clic en dehors pour fermer (même UX que ton HTML)
+  // clic en dehors pour fermer le <dialog> (comme HTML)
   useEffect(() => {
     const dlg = pickerRef.current;
     if (!dlg) return;
     const onClick = (e: MouseEvent) => {
       const rect = dlg.getBoundingClientRect();
-      const inBox =
-        e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+      const inBox = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
       if (!inBox) dlg.close();
     };
     dlg.addEventListener("click", onClick);
     return () => dlg.removeEventListener("click", onClick);
   }, []);
 
-  // CHOISIR UN WALLET DANS LE MODAL
+  // CHOIX D’UN WALLET
   async function pickWallet(id: WalletId) {
     closePicker();
     try {
@@ -100,7 +158,7 @@ export default function App() {
       setProvider(res.provider);
       setPubkey(res.publicKey);
     } catch {
-      /* utilisateur a annulé : pas d'alerte */
+      /* utilisateur a annulé : on ignore */
     }
   }
 
@@ -112,7 +170,7 @@ export default function App() {
 
   async function sign() {
     if (!connected) {
-      openPicker(); // invite à se connecter
+      openPicker();
       return;
     }
     if (!provider?.signMessage) {
@@ -194,7 +252,6 @@ export default function App() {
               </h1>
               <p className="mt-4 text-slate-300/90 leading-relaxed">
                 Works with Phantom, Solflare, Backpack, Glow, Exodus and more.
-                No passwords, no email—just cryptographic proof.
               </p>
               <ul className="mt-6 space-y-2 text-slate-300/80 text-sm">
                 <li className="flex items-center gap-2"><CheckIcon className="h-4 w-4 text-emerald-400" />Non-custodial • stays in your wallet</li>
@@ -249,14 +306,6 @@ export default function App() {
                       </a>
                     )}
                   </div>
-
-                  <details className="mt-4 group">
-                    <summary className="cursor-pointer text-sm text-slate-300/90 hover:text-slate-200">How to verify this signature</summary>
-                    <div className="mt-3 text-sm text-slate-300/80 space-y-2">
-                      <p>Use <code>tweetnacl</code> or <code>@solana/web3.js</code> to verify the signature bytes over the exact same message, using the wallet public key.</p>
-                      <p className="text-slate-400">Make sure the verifier encodes the message as UTF-8 and decodes the signature from base58.</p>
-                    </div>
-                  </details>
                 </div>
               )}
             </div>
@@ -284,7 +333,7 @@ export default function App() {
         </div>
       </footer>
 
-      {/* ===== <dialog> natif (même UX que ton HTML) ===== */}
+      {/* ===== <dialog> natif + Fallback overlay ===== */}
       <dialog id="picker" ref={pickerRef}>
         <div className="dlg-hd" style={{padding:"16px 20px", borderBottom:"1px solid #1d2942", fontWeight:700}}>Choisir un wallet</div>
         <div className="dlg-bd" style={{padding:"12px"}}>
@@ -309,6 +358,9 @@ export default function App() {
           </div>
         </div>
       </dialog>
+
+      {/* Fallback Overlay (si <dialog> indisponible / showModal échoue) */}
+      <PickerOverlay open={fallbackOpen} onClose={() => setFallbackOpen(false)} onPick={pickWallet} />
     </div>
   );
 }
