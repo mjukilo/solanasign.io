@@ -1,6 +1,9 @@
 import { useState } from "react";
 import bs58 from "bs58";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 
+/* ---------- Icônes inline (pas de dépendances externes) ---------- */
 function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
@@ -11,7 +14,6 @@ function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
-
 function ClipboardIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
@@ -22,7 +24,6 @@ function ClipboardIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
-
 function ExternalIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
@@ -33,18 +34,15 @@ function ExternalIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
-
 function LogoMark(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-      <path
-        fill="currentColor"
-        d="M4 7h16l-2 4H6l-2-4zm2 6h12l-2 4H8l-2-4z"
-      />
+      <path fill="currentColor" d="M4 7h16l-2 4H6l-2-4zm2 6h12l-2 4H8l-2-4z" />
     </svg>
   );
 }
 
+/* ---------- Utilitaires UI ---------- */
 function Copy({ text }: { text: string }) {
   const [ok, setOk] = useState(false);
   return (
@@ -63,7 +61,6 @@ function Copy({ text }: { text: string }) {
     </button>
   );
 }
-
 function MobileActionBar({
   disabled,
   onSign,
@@ -93,39 +90,29 @@ function MobileActionBar({
   );
 }
 
+/* ---------- App ---------- */
 export default function App() {
-  // ⚠️ Branche ces deux états sur ton adapter réel (phantom/solflare/etc.)
-  const [connected, setConnected] = useState(false);
-  const [pubkey, setPubkey] = useState<string | null>(null);
+  const { connected, publicKey, signMessage } = useWallet();
 
   const [msg, setMsg] = useState(
     "I am proving I own this wallet on " + new Date().toISOString()
   );
   const [sig, setSig] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
   const disabled = !connected || !msg.trim() || busy;
 
-  // Placeholder: ouvre ton modal/adaptateur et récupère publicKey.toBase58()
-  const connectWallet = async () => {
-    // ...connect adapter
-    // setConnected(true);
-    // setPubkey(publicKey.toBase58());
-    alert("Connect wallet: plug your adapter logic here.");
-  };
-
-  // Placeholder: appelle signMessage(encoded) de ton adapter
   const sign = async () => {
-    if (!connected) return;
+    if (!connected || !signMessage) {
+      alert("Connect a wallet that supports message signing.");
+      return;
+    }
     setBusy(true);
     setSig(null);
     try {
-      // const encoded = new TextEncoder().encode(msg);
-      // const rawSig = await signMessage(encoded);
-      // const signature = bs58.encode(rawSig);
-      const signature = bs58.encode(
-        new TextEncoder().encode("demo-signature") // demo only
-      );
-      setSig(signature);
+      const encoded = new TextEncoder().encode(msg);
+      const raw = await signMessage(encoded); // popup wallet
+      setSig(bs58.encode(raw));
     } catch (e) {
       console.error(e);
       alert("Signature cancelled or failed.");
@@ -133,6 +120,8 @@ export default function App() {
       setBusy(false);
     }
   };
+
+  const shortKey = publicKey?.toBase58();
 
   return (
     <div className="min-h-screen relative overflow-hidden">
@@ -157,19 +146,15 @@ export default function App() {
             </div>
           </a>
 
-          <div className="flex items-center gap-3 w-full max-w-[50%] justify-end">
-            {connected ? (
+          <div className="flex items-center gap-3 w-full max-w-[60%] justify-end">
+            {connected && shortKey ? (
               <span className="max-w-[40vw] truncate text-xs rounded-full bg-emerald-400/10 border border-emerald-400/30 px-3 py-1 text-emerald-300">
-                {pubkey?.slice(0, 4)}…{pubkey?.slice(-4)}
+                {shortKey.slice(0, 4)}…{shortKey.slice(-4)}
               </span>
             ) : null}
 
-            <button
-              onClick={connectWallet}
-              className="w-full md:w-auto rounded-xl px-4 py-3 text-sm font-medium bg-sky-500 text-sky-950 hover:bg-sky-400 transition shadow-glow"
-            >
-              {connected ? "Change wallet" : "Connect wallet"}
-            </button>
+            {/* Wallet adapter multi-wallet button */}
+            <WalletMultiButton className="w-full md:w-auto rounded-xl !bg-sky-500 !text-sky-950 hover:!bg-sky-400 shadow-glow !h-auto !py-3 !px-4 !text-sm" />
           </div>
         </div>
       </header>
@@ -248,7 +233,7 @@ export default function App() {
                     <Copy text={sig} />
                     <a
                       aria-label="Open wallet in Solana Explorer"
-                      href={`https://explorer.solana.com/address/${pubkey ?? ""}`}
+                      href={`https://explorer.solana.com/address/${shortKey ?? ""}`}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex items-center gap-2 text-sm underline decoration-dotted hover:opacity-90"
@@ -265,8 +250,8 @@ export default function App() {
                     <div className="mt-3 text-sm text-slate-300/80 space-y-2">
                       <p>
                         Use <code>tweetnacl</code> or <code>@solana/web3.js</code>{" "}
-                        to verify the signature bytes over the exact same message,
-                        using the wallet public key.
+                        to verify the signature bytes over the exact same
+                        message, using the wallet public key.
                       </p>
                       <p className="text-slate-400">
                         Make sure the verifier encodes the message as UTF-8 and
@@ -291,7 +276,10 @@ export default function App() {
         <div className="mx-auto max-w-6xl px-4 sm:px-6 py-4 sm:py-6 text-sm text-slate-400 flex flex-wrap items-center justify-between gap-3">
           <span>© {new Date().getFullYear()} SolanaSign</span>
           <div className="flex items-center gap-4">
-            <a className="hover:text-slate-200" href="https://github.com/mjukilo/solanasign.io">
+            <a
+              className="hover:text-slate-200"
+              href="https://github.com/mjukilo/solanasign.io"
+            >
               GitHub
             </a>
             <button
