@@ -1,25 +1,84 @@
 import { useState } from "react";
 import bs58 from "bs58";
-import { WALLETS, WalletId, connectWalletById, disconnectProvider } from "./wallets";
+import { WalletPicker } from "./WalletPicker";
+import { connectWalletById, disconnectProvider, WalletId } from "./wallets";
 
+/* --- Icônes inline --- */
+function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
+      <path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" />
+    </svg>
+  );
+}
+function ClipboardIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
+      <path fill="currentColor" d="M16 4h-1a2 2 0 0 0-4 0H10a2 2 0 0 0-2 2v1H7a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1V6a2 2 0 0 0-2-2zm-3 0a1 1 0 0 1 1 1v1h-2V5a1 1 0 0 1 1-1z" />
+    </svg>
+  );
+}
+function ExternalIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
+      <path fill="currentColor" d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3zM5 5h6v2H7v10h10v-4h2v6H5V5z" />
+    </svg>
+  );
+}
+function LogoMark(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
+      <path fill="currentColor" d="M4 7h16l-2 4H6l-2-4zm2 6h12l-2 4H8l-2-4z" />
+    </svg>
+  );
+}
+
+/* --- UI utils --- */
 function Copy({ text }: { text: string }) {
   const [ok, setOk] = useState(false);
   return (
     <button
-      onClick={async () => { await navigator.clipboard.writeText(text); setOk(true); setTimeout(()=>setOk(false), 1200); }}
+      aria-label="Copy signature to clipboard"
+      onClick={async () => {
+        await navigator.clipboard.writeText(text);
+        setOk(true);
+        setTimeout(() => setOk(false), 1200);
+      }}
       className="inline-flex items-center gap-2 rounded-xl border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-sm hover:bg-slate-800 transition"
       title="Copy to clipboard"
     >
-      <span className="i-lucide-clipboard h-4 w-4" />
+      <ClipboardIcon className="h-4 w-4" />
       {ok ? "Copied!" : "Copy"}
     </button>
   );
 }
+function MobileActionBar({ disabled, onSign }: { disabled: boolean; onSign: () => void }) {
+  return (
+    <div
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-800/70 bg-slate-950/85 backdrop-blur supports-[backdrop-filter]:bg-slate-950/60 md:hidden"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      <div className="mx-auto max-w-6xl px-4 py-3">
+        <button
+          onClick={onSign}
+          disabled={disabled}
+          className={`w-full rounded-xl px-4 py-3 text-sm font-semibold transition ${
+            disabled ? "bg-slate-700 text-slate-400 cursor-not-allowed" : "bg-sky-500 text-sky-950 hover:bg-sky-400"
+          }`}
+        >
+          {disabled ? "Ready to sign…" : "Sign message"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
+/* --- App (custom modal flow) --- */
 export default function App() {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [connectedWith, setConnectedWith] = useState<WalletId | null>(null);
   const [provider, setProvider] = useState<any>(null);
   const [pubkey, setPubkey] = useState<string | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
 
   const [msg, setMsg] = useState("I am proving I own this wallet on " + new Date().toISOString());
   const [sig, setSig] = useState<string | null>(null);
@@ -27,16 +86,18 @@ export default function App() {
 
   const connected = !!provider && !!pubkey;
   const disabled = !connected || !msg.trim() || busy;
+  const shortKey = pubkey ?? undefined;
 
-  async function pickWallet(id: WalletId) {
-    setPickerOpen(false);
+  async function handlePick(id: WalletId) {
     try {
       const res = await connectWalletById(id);
-      if (!res) return; // redirection install si non détecté
+      if (!res) return; // redirigé vers install
       setProvider(res.provider);
       setPubkey(res.publicKey);
+      setConnectedWith(id);
+      setPickerOpen(false);
     } catch {
-      // utilisateur a annulé : on ignore
+      // ignore
     }
   }
 
@@ -44,6 +105,7 @@ export default function App() {
     await disconnectProvider(provider);
     setProvider(null);
     setPubkey(null);
+    setConnectedWith(null);
   }
 
   async function sign() {
@@ -52,19 +114,20 @@ export default function App() {
       return;
     }
     if (!provider?.signMessage) {
-      alert("This wallet does not support signMessage.");
+      alert("Ce wallet ne supporte pas signMessage.");
       return;
     }
     setBusy(true);
     setSig(null);
     try {
       const encoded = new TextEncoder().encode(msg);
+      // certains wallets renvoient directement Uint8Array, d'autres { signature }
       const res: any = await provider.signMessage(encoded, "utf8").catch(() => provider.signMessage(encoded));
       const raw: Uint8Array = res?.signature ?? res;
       setSig(bs58.encode(raw));
     } catch (e) {
       console.error(e);
-      alert("Signature cancelled or failed.");
+      alert("Signature annulée ou échouée.");
     } finally {
       setBusy(false);
     }
@@ -72,7 +135,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen relative overflow-hidden">
-      {/* Fond */}
+      {/* Background */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute inset-0 bg-[radial-gradient(60rem_60rem_at_80%_-10%,rgba(14,165,233,.25),transparent_60%)]" />
         <div className="absolute inset-0 bg-grid bg-[length:22px_22px]" />
@@ -80,35 +143,35 @@ export default function App() {
 
       {/* Header */}
       <header className="relative z-10">
-        <div className="mx-auto max-w-6xl px-4 py-6 flex items-center justify-between">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 py-4 sm:py-6 flex items-center justify-between gap-3">
           <a href="/" className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-xl bg-sky-500/20 ring-1 ring-sky-400/30 backdrop-blur flex items-center justify-center">
-              <svg width="18" height="18" viewBox="0 0 24 24" className="text-sky-300">
-                <path fill="currentColor" d="M4 7h16l-2 4H6l-2-4zm2 6h12l-2 4H8l-2-4z"/>
-              </svg>
+              <LogoMark className="h-4 w-4 text-sky-300" />
             </div>
             <div>
               <p className="text-lg font-semibold tracking-tight">SolanaSign</p>
               <p className="text-xs text-slate-400 -mt-1">Sign a message • Prove ownership</p>
             </div>
           </a>
-          <div className="flex items-center gap-3">
-            {connected ? (
-              <span className="text-xs rounded-full bg-emerald-400/10 border border-emerald-400/30 px-3 py-1 text-emerald-300">
-                {pubkey?.slice(0,4)}…{pubkey?.slice(-4)}
+
+          <div className="flex items-center gap-3 w-full max-w-[60%] justify-end">
+            {connected && shortKey && (
+              <span className="max-w-[40vw] truncate text-xs rounded-full bg-emerald-400/10 border border-emerald-400/30 px-3 py-1 text-emerald-300">
+                {shortKey.slice(0, 4)}…{shortKey.slice(-4)}
               </span>
-            ) : null}
+            )}
+
             {!connected ? (
               <button
                 onClick={() => setPickerOpen(true)}
-                className="rounded-xl px-4 py-2 text-sm font-medium bg-sky-500 text-sky-950 hover:bg-sky-400 transition shadow-glow"
+                className="w-full md:w-auto rounded-xl px-4 py-3 text-sm font-medium bg-sky-500 text-sky-950 hover:bg-sky-400 transition shadow-glow"
               >
                 Connect wallet
               </button>
             ) : (
               <button
                 onClick={disconnect}
-                className="rounded-xl px-4 py-2 text-sm font-medium bg-slate-700 text-slate-200 hover:bg-slate-600 transition"
+                className="w-full md:w-auto rounded-xl px-4 py-3 text-sm font-medium bg-slate-700 text-slate-200 hover:bg-slate-600 transition"
               >
                 Disconnect
               </button>
@@ -117,40 +180,57 @@ export default function App() {
         </div>
       </header>
 
-      {/* Hero + Card */}
+      {/* Main */}
       <main className="relative z-10">
-        <section className="mx-auto max-w-6xl px-4 py-10 md:py-16">
-          <div className="grid md:grid-cols-2 gap-8 items-stretch">
+        <section className="mx-auto max-w-6xl px-4 sm:px-6 py-10 md:py-16">
+          <div className="grid md:grid-cols-2 gap-6 md:gap-8 items-stretch">
+            {/* Left column */}
             <div className="flex flex-col justify-center">
               <h1 className="text-3xl md:text-5xl font-semibold tracking-tight">
-                Prove wallet ownership<br/><span className="text-sky-400">by signing a message</span>.
+                Prove wallet ownership
+                <br />
+                <span className="text-sky-400">by signing a message</span>.
               </h1>
               <p className="mt-4 text-slate-300/90 leading-relaxed">
-                Works with Phantom, Solflare, Backpack, Glow, Exodus and more. No passwords, no email—just cryptographic proof.
+                Works with Phantom, Solflare, Backpack, Glow, Exodus and more.
+                No passwords, no email—just cryptographic proof.
               </p>
               <ul className="mt-6 space-y-2 text-slate-300/80 text-sm">
-                <li className="flex items-center gap-2"><span className="i-lucide-check h-4 w-4 text-emerald-400" /> Non-custodial • stays in your wallet</li>
-                <li className="flex items-center gap-2"><span className="i-lucide-check h-4 w-4 text-emerald-400" /> bs58 signature output</li>
-                <li className="flex items-center gap-2"><span className="i-lucide-check h-4 w-4 text-emerald-400" /> Copy & share instantly</li>
+                <li className="flex items-center gap-2">
+                  <CheckIcon className="h-4 w-4 text-emerald-400" />
+                  Non-custodial • stays in your wallet
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckIcon className="h-4 w-4 text-emerald-400" />
+                  bs58 signature output
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckIcon className="h-4 w-4 text-emerald-400" />
+                  Copy & share instantly
+                </li>
               </ul>
             </div>
 
-            <div className="rounded-2xl border border-slate-700/60 bg-slate-900/50 backdrop-blur p-6 md:p-8 shadow-glow">
+            {/* Card */}
+            <div className="rounded-2xl border border-slate-700/60 bg-slate-900/50 backdrop-blur p-4 sm:p-8 shadow-glow">
               <label className="block text-sm font-medium text-slate-300">Message to sign</label>
               <textarea
                 value={msg}
-                onChange={(e)=>setMsg(e.target.value)}
-                rows={5}
+                onChange={(e) => setMsg(e.target.value)}
+                rows={6}
+                inputMode="text"
                 placeholder="Write the exact message you want to sign"
-                className="mt-2 w-full resize-y rounded-xl border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-brand.ring"
+                className="mt-2 w-full rounded-xl border border-slate-700/60 bg-slate-800/60 px-3 py-3 text-base md:text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-brand.ring"
               />
 
-              <div className="mt-4 flex items-center justify-between">
-                <p className="text-xs text-slate-400">Tip: include a timestamp & domain to avoid replay.</p>
+              <div className="mt-4 flex flex-col md:flex-row items-center gap-3 md:gap-4 justify-between">
+                <p className="text-xs text-slate-400 self-start">Tip: include a timestamp & domain to avoid replay.</p>
                 <button
                   onClick={sign}
                   disabled={disabled}
-                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition shadow-glow ${disabled ? "bg-slate-700 text-slate-400 cursor-not-allowed" : "bg-sky-500 text-sky-950 hover:bg-sky-400"}`}
+                  className={`w-full md:w-auto rounded-xl px-4 py-3 text-sm font-semibold transition shadow-glow ${
+                    disabled ? "bg-slate-700 text-slate-400 cursor-not-allowed" : "bg-sky-500 text-sky-950 hover:bg-sky-400"
+                  }`}
                 >
                   {busy ? "Signing…" : "Sign message"}
                 </button>
@@ -162,19 +242,26 @@ export default function App() {
                   <div className="mt-2 rounded-xl border border-slate-700/60 bg-slate-800/60 p-3 text-xs break-all">
                     {sig}
                   </div>
-                  <div className="mt-3 flex items-center gap-3">
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
                     <Copy text={sig} />
-                    <a
-                      href={`https://explorer.solana.com/address/${pubkey ?? ""}`}
-                      target="_blank"
-                      className="inline-flex items-center gap-2 text-sm underline decoration-dotted hover:opacity-90"
-                    >
-                      <span className="i-lucide-external-link h-4 w-4" /> View wallet on Explorer
-                    </a>
+                    {shortKey && (
+                      <a
+                        aria-label="Open wallet in Solana Explorer"
+                        href={`https://explorer.solana.com/address/${shortKey}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 text-sm underline decoration-dotted hover:opacity-90"
+                      >
+                        <ExternalIcon className="h-4 w-4" />
+                        View wallet on Explorer
+                      </a>
+                    )}
                   </div>
 
                   <details className="mt-4 group">
-                    <summary className="cursor-pointer text-sm text-slate-300/90 hover:text-slate-200">How to verify this signature</summary>
+                    <summary className="cursor-pointer text-sm text-slate-300/90 hover:text-slate-200">
+                      How to verify this signature
+                    </summary>
                     <div className="mt-3 text-sm text-slate-300/80 space-y-2">
                       <p>Use <code>tweetnacl</code> or <code>@solana/web3.js</code> to verify the signature bytes over the exact same message, using the wallet public key.</p>
                       <p className="text-slate-400">Make sure the verifier encodes the message as UTF-8 and decodes the signature from base58.</p>
@@ -185,16 +272,19 @@ export default function App() {
             </div>
           </div>
         </section>
+
+        {/* Mobile bottom action bar */}
+        {connected && msg.trim().length > 0 && <MobileActionBar disabled={disabled} onSign={sign} />}
       </main>
 
       {/* Footer */}
       <footer className="relative z-10 border-t border-slate-800/60">
-        <div className="mx-auto max-w-6xl px-4 py-6 text-sm text-slate-400 flex flex-wrap items-center justify-between gap-3">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 py-4 sm:py-6 text-sm text-slate-400 flex flex-wrap items-center justify-between gap-3">
           <span>© {new Date().getFullYear()} SolanaSign</span>
           <div className="flex items-center gap-4">
             <a className="hover:text-slate-200" href="https://github.com/mjukilo/solanasign.io">GitHub</a>
             <button
-              onClick={()=>document.documentElement.classList.toggle('dark')}
+              onClick={() => document.documentElement.classList.toggle("dark")}
               className="rounded-xl border border-slate-700/60 px-3 py-1"
               title="Toggle dark mode"
             >
@@ -204,36 +294,8 @@ export default function App() {
         </div>
       </footer>
 
-      {/* ===== Modal React (sélecteur de wallets) ===== */}
-      {pickerOpen && (
-        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" onClick={() => setPickerOpen(false)}>
-          <div className="absolute inset-0 bg-black/60" />
-          <div
-            className="relative mx-auto mt-24 w-[92%] max-w-md rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="border-b border-slate-800 px-5 py-4 text-sm font-semibold">Choose a wallet</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3">
-              {WALLETS.map((w) => (
-                <button
-                  key={w.id}
-                  onClick={() => pickWallet(w.id)}
-                  className="flex items-center gap-3 rounded-xl border border-slate-700/70 bg-slate-800/50 px-3 py-3 text-left hover:bg-slate-800 transition"
-                >
-                  <img src={w.icon} alt={w.label} className="h-7 w-7 rounded-md object-cover" />
-                  <div>
-                    <div className="text-sm font-medium">{w.label}</div>
-                    <div className="text-xs text-slate-400">Extension / Mobile app</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-            <div className="px-5 pb-4 pt-2 text-xs text-slate-400">
-              Mobile tip: open this page inside your wallet’s in-app browser.
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal */}
+      <WalletPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={handlePick} />
     </div>
   );
 }
