@@ -91,7 +91,7 @@ export default function App() {
   async function handlePick(id: WalletId) {
     try {
       const res = await connectWalletById(id);
-      if (!res) return; // redirigé vers page d'installation
+      if (!res) return; // redirection install
       setProvider(res.provider);
       setPubkey(res.publicKey);
       setConnectedWith(id);
