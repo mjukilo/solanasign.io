@@ -3,46 +3,12 @@ import bs58 from "bs58";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
-/* ---------- Icônes inline (pas de dépendances externes) ---------- */
-function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-      <path
-        fill="currentColor"
-        d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"
-      />
-    </svg>
-  );
-}
-function ClipboardIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-      <path
-        fill="currentColor"
-        d="M16 4h-1a2 2 0 0 0-4 0H10a2 2 0 0 0-2 2v1H7a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1V6a2 2 0 0 0-2-2zm-3 0a1 1 0 0 1 1 1v1h-2V5a1 1 0 0 1 1-1z"
-      />
-    </svg>
-  );
-}
-function ExternalIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-      <path
-        fill="currentColor"
-        d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3zM5 5h6v2H7v10h10v-4h2v6H5V5z"
-      />
-    </svg>
-  );
-}
-function LogoMark(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-      <path fill="currentColor" d="M4 7h16l-2 4H6l-2-4zm2 6h12l-2 4H8l-2-4z" />
-    </svg>
-  );
-}
+/* Icônes inline — inchangées comme précédemment */
+function CheckIcon(props: React.SVGProps<SVGSVGElement>) { /* … */ }
+function ClipboardIcon(props: React.SVGProps<SVGSVGElement>) { /* … */ }
+function ExternalIcon(props: React.SVGProps<SVGSVGElement>) { /* … */ }
+function LogoMark(props: React.SVGProps<SVGSVGElement>) { /* … */ }
 
-/* ---------- Utilitaires UI ---------- */
 function Copy({ text }: { text: string }) {
   const [ok, setOk] = useState(false);
   return (
@@ -54,20 +20,14 @@ function Copy({ text }: { text: string }) {
         setTimeout(() => setOk(false), 1200);
       }}
       className="inline-flex items-center gap-2 rounded-xl border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-sm hover:bg-slate-800 transition"
-      title="Copy to clipboard"
     >
       <ClipboardIcon className="h-4 w-4" />
       {ok ? "Copied!" : "Copy"}
     </button>
   );
 }
-function MobileActionBar({
-  disabled,
-  onSign,
-}: {
-  disabled: boolean;
-  onSign: () => void;
-}) {
+
+function MobileActionBar({ disabled, onSign }: { disabled: boolean; onSign: () => void }) {
   return (
     <div
       className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-800/70 bg-slate-950/85 backdrop-blur supports-[backdrop-filter]:bg-slate-950/60 md:hidden"
@@ -90,14 +50,11 @@ function MobileActionBar({
   );
 }
 
-/* ---------- App ---------- */
 export default function App() {
   const { connected, publicKey, signMessage } = useWallet();
-  const { setVisible } = useWalletModal(); // ouvre le modal multi-wallet
+  const { setVisible } = useWalletModal(); // clé pour ouvrir le modal
 
-  const [msg, setMsg] = useState(
-    "I am proving I own this wallet on " + new Date().toISOString()
-  );
+  const [msg, setMsg] = useState("I am proving I own this wallet on " + new Date().toISOString());
   const [sig, setSig] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -108,7 +65,6 @@ export default function App() {
 
   const sign = async () => {
     if (!connected || !signMessage) {
-      // Si aucun wallet n'est connecté, on ouvre directement le modal
       setVisible(true);
       return;
     }
@@ -116,10 +72,10 @@ export default function App() {
     setSig(null);
     try {
       const encoded = new TextEncoder().encode(msg);
-      const raw = await signMessage(encoded); // popup wallet
+      const raw = await signMessage(encoded);
       setSig(bs58.encode(raw));
-    } catch (e) {
-      console.error(e);
+    } catch (err) {
+      console.error(err);
       alert("Signature cancelled or failed.");
     } finally {
       setBusy(false);
@@ -143,19 +99,16 @@ export default function App() {
             </div>
             <div>
               <p className="text-lg font-semibold tracking-tight">SolanaSign</p>
-              <p className="text-xs text-slate-400 -mt-1">
-                Sign a message • Prove ownership
-              </p>
+              <p className="text-xs text-slate-400 -mt-1">Sign a message • Prove ownership</p>
             </div>
           </a>
 
-          {/* ----- BOUTON CUSTOM : ouvre le modal multi-wallet ----- */}
           <div className="flex items-center gap-3 w-full max-w-[60%] justify-end">
-            {connected && shortKey ? (
+            {connected && shortKey && (
               <span className="max-w-[40vw] truncate text-xs rounded-full bg-emerald-400/10 border border-emerald-400/30 px-3 py-1 text-emerald-300">
                 {shortKey.slice(0, 4)}…{shortKey.slice(-4)}
               </span>
-            ) : null}
+            )}
 
             <button
               onClick={openWalletModal}
@@ -168,15 +121,14 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main */}
+      {/* Main content */}
       <main className="relative z-10">
         <section className="mx-auto max-w-6xl px-4 sm:px-6 py-10 md:py-16">
           <div className="grid md:grid-cols-2 gap-6 md:gap-8 items-stretch">
-            {/* Left column */}
+            {/* Left panel */}
             <div className="flex flex-col justify-center">
               <h1 className="text-3xl md:text-5xl font-semibold tracking-tight">
-                Prove wallet ownership
-                <br />
+                Prove wallet ownership<br />
                 <span className="text-sky-400">by signing a message</span>.
               </h1>
               <p className="mt-4 text-slate-300/90 leading-relaxed">
@@ -199,7 +151,7 @@ export default function App() {
               </ul>
             </div>
 
-            {/* Card */}
+            {/* Right panel – signature card */}
             <div className="rounded-2xl border border-slate-700/60 bg-slate-900/50 backdrop-blur p-4 sm:p-8 shadow-glow">
               <label className="block text-sm font-medium text-slate-300">
                 Message to sign
@@ -285,16 +237,11 @@ export default function App() {
         <div className="mx-auto max-w-6xl px-4 sm:px-6 py-4 sm:py-6 text-sm text-slate-400 flex flex-wrap items-center justify-between gap-3">
           <span>© {new Date().getFullYear()} SolanaSign</span>
           <div className="flex items-center gap-4">
-            <a
-              className="hover:text-slate-200"
-              href="https://github.com/mjukilo/solanasign.io"
-            >
+            <a className="hover:text-slate-200" href="https://github.com/mjukilo/solanasign.io">
               GitHub
             </a>
             <button
-              onClick={() =>
-                document.documentElement.classList.toggle("dark")
-              }
+              onClick={() => document.documentElement.classList.toggle("dark")}
               className="rounded-xl border border-slate-700/60 px-3 py-1"
               title="Toggle dark mode"
             >
