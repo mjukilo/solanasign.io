@@ -1,16 +1,17 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import bs58 from "bs58";
-import { useWallet } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 
-/* ====== Icônes ====== */
 function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-      <path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" />
+      <path
+        fill="currentColor"
+        d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"
+      />
     </svg>
   );
 }
+
 function ClipboardIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
@@ -21,6 +22,7 @@ function ClipboardIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
 function ExternalIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
@@ -31,15 +33,18 @@ function ExternalIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
 function LogoMark(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-      <path fill="currentColor" d="M4 7h16l-2 4H6l-2-4zm2 6h12l-2 4H8l-2-4z" />
+      <path
+        fill="currentColor"
+        d="M4 7h16l-2 4H6l-2-4zm2 6h12l-2 4H8l-2-4z"
+      />
     </svg>
   );
 }
 
-/* ====== UI helpers ====== */
 function Copy({ text }: { text: string }) {
   const [ok, setOk] = useState(false);
   return (
@@ -61,7 +66,7 @@ function Copy({ text }: { text: string }) {
 
 function MobileActionBar({
   disabled,
-  onSign
+  onSign,
 }: {
   disabled: boolean;
   onSign: () => void;
@@ -88,79 +93,10 @@ function MobileActionBar({
   );
 }
 
-/* ====== Boutons “forcer le pop-up” ====== */
-/** Noms attendus par wallet-adapter (selon les adapters importés) */
-const WALLET_NAMES = {
-  phantom: "Phantom",
-  solflare: "Solflare",
-  backpack: "Backpack",
-  glow: "Glow",
-  exodus: "Exodus",
-  ledger: "Ledger"
-} as const;
-
-function ForcePopupButtons() {
-  const { select, connect: adapterConnect, connected } = useWallet();
-
-  const forceConnect = async (name: string) => {
-    try {
-      // 1) Sélectionne explicitement l’adapter
-      await select(name);
-      // 2) Appelle connect() dans un geste utilisateur => déclenche le pop-up extension
-      await adapterConnect();
-    } catch (e) {
-      console.error("Force connect error:", e);
-      alert(
-        `Unable to open ${name}.\nVérifie que l’extension est installée/activée (et autorisée en navigation privée le cas échéant).`
-      );
-    }
-  };
-
-  if (connected) return null;
-
-  return (
-    <div className="flex flex-wrap gap-2">
-      <button
-        onClick={() => forceConnect(WALLET_NAMES.phantom)}
-        className="rounded-xl px-3 py-2 text-xs border border-slate-700/60 hover:bg-slate-800/50"
-      >
-        Force popup Phantom
-      </button>
-      <button
-        onClick={() => forceConnect(WALLET_NAMES.solflare)}
-        className="rounded-xl px-3 py-2 text-xs border border-slate-700/60 hover:bg-slate-800/50"
-      >
-        Force popup Solflare
-      </button>
-      <button
-        onClick={() => forceConnect(WALLET_NAMES.backpack)}
-        className="rounded-xl px-3 py-2 text-xs border border-slate-700/60 hover:bg-slate-800/50"
-      >
-        Force popup Backpack
-      </button>
-      <button
-        onClick={() => forceConnect(WALLET_NAMES.glow)}
-        className="rounded-xl px-3 py-2 text-xs border border-slate-700/60 hover:bg-slate-800/50"
-      >
-        Force popup Glow
-      </button>
-      <button
-        onClick={() => forceConnect(WALLET_NAMES.exodus)}
-        className="rounded-xl px-3 py-2 text-xs border border-slate-700/60 hover:bg-slate-800/50"
-      >
-        Force popup Exodus
-      </button>
-    </div>
-  );
-}
-
-/* ====== App ====== */
 export default function App() {
-  const { publicKey, connected, signMessage } = useWallet();
-  const pubkey58 = useMemo(
-    () => (publicKey ? publicKey.toBase58() : null),
-    [publicKey]
-  );
+  // ⚠️ Branche ces deux états sur ton adapter réel (phantom/solflare/etc.)
+  const [connected, setConnected] = useState(false);
+  const [pubkey, setPubkey] = useState<string | null>(null);
 
   const [msg, setMsg] = useState(
     "I am proving I own this wallet on " + new Date().toISOString()
@@ -169,20 +105,26 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const disabled = !connected || !msg.trim() || busy;
 
+  // Placeholder: ouvre ton modal/adaptateur et récupère publicKey.toBase58()
+  const connectWallet = async () => {
+    // ...connect adapter
+    // setConnected(true);
+    // setPubkey(publicKey.toBase58());
+    alert("Connect wallet: plug your adapter logic here.");
+  };
+
+  // Placeholder: appelle signMessage(encoded) de ton adapter
   const sign = async () => {
     if (!connected) return;
-    if (!signMessage) {
-      alert(
-        "This wallet does not support message signing. Try Phantom, Solflare or Backpack."
-      );
-      return;
-    }
     setBusy(true);
     setSig(null);
     try {
-      const encoded = new TextEncoder().encode(msg);
-      const rawSig = await signMessage(encoded); // déclenche le pop-up si nécessaire
-      const signature = bs58.encode(rawSig);
+      // const encoded = new TextEncoder().encode(msg);
+      // const rawSig = await signMessage(encoded);
+      // const signature = bs58.encode(rawSig);
+      const signature = bs58.encode(
+        new TextEncoder().encode("demo-signature") // demo only
+      );
       setSig(signature);
     } catch (e) {
       console.error(e);
@@ -215,16 +157,19 @@ export default function App() {
             </div>
           </a>
 
-          {/* Boutons de connexion */}
-          <div className="flex items-center gap-3 w-full max-w-[60%] justify-end">
-            {connected && pubkey58 ? (
+          <div className="flex items-center gap-3 w-full max-w-[50%] justify-end">
+            {connected ? (
               <span className="max-w-[40vw] truncate text-xs rounded-full bg-emerald-400/10 border border-emerald-400/30 px-3 py-1 text-emerald-300">
-                {pubkey58.slice(0, 4)}…{pubkey58.slice(-4)}
+                {pubkey?.slice(0, 4)}…{pubkey?.slice(-4)}
               </span>
             ) : null}
 
-            {/* 1) Bouton officiel (modal multi-wallet, dApp mobile ok) */}
-            <WalletMultiButton className="!rounded-xl !px-4 !py-3 !text-sm !font-medium !bg-sky-500 !text-sky-950 hover:!bg-sky-400 !transition !shadow-glow" />
+            <button
+              onClick={connectWallet}
+              className="w-full md:w-auto rounded-xl px-4 py-3 text-sm font-medium bg-sky-500 text-sky-950 hover:bg-sky-400 transition shadow-glow"
+            >
+              {connected ? "Change wallet" : "Connect wallet"}
+            </button>
           </div>
         </div>
       </header>
@@ -233,7 +178,7 @@ export default function App() {
       <main className="relative z-10">
         <section className="mx-auto max-w-6xl px-4 sm:px-6 py-10 md:py-16">
           <div className="grid md:grid-cols-2 gap-6 md:gap-8 items-stretch">
-            {/* Left */}
+            {/* Left column */}
             <div className="flex flex-col justify-center">
               <h1 className="text-3xl md:text-5xl font-semibold tracking-tight">
                 Prove wallet ownership
@@ -258,14 +203,6 @@ export default function App() {
                   Copy & share instantly
                 </li>
               </ul>
-
-              {/* 2) Fallback visible : forcer le pop-up si le bouton au-dessus ne déclenche rien */}
-              <div className="mt-6">
-                <p className="text-xs text-slate-400 mb-2">
-                  Pas de pop-up ? Essaie :
-                </p>
-                <ForcePopupButtons />
-              </div>
             </div>
 
             {/* Card */}
@@ -311,7 +248,7 @@ export default function App() {
                     <Copy text={sig} />
                     <a
                       aria-label="Open wallet in Solana Explorer"
-                      href={`https://explorer.solana.com/address/${pubkey58 ?? ""}`}
+                      href={`https://explorer.solana.com/address/${pubkey ?? ""}`}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex items-center gap-2 text-sm underline decoration-dotted hover:opacity-90"
@@ -327,10 +264,13 @@ export default function App() {
                     </summary>
                     <div className="mt-3 text-sm text-slate-300/80 space-y-2">
                       <p>
-                        Use <code>tweetnacl</code> or <code>@solana/web3.js</code> to verify the signature bytes over the exact same message, using the wallet public key.
+                        Use <code>tweetnacl</code> or <code>@solana/web3.js</code>{" "}
+                        to verify the signature bytes over the exact same message,
+                        using the wallet public key.
                       </p>
                       <p className="text-slate-400">
-                        Make sure the verifier encodes the message as UTF-8 and decodes the signature from base58.
+                        Make sure the verifier encodes the message as UTF-8 and
+                        decodes the signature from base58.
                       </p>
                     </div>
                   </details>
