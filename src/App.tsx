@@ -1,9 +1,9 @@
 import { useState } from "react";
 import bs58 from "bs58";
-import { WalletPicker } from "./WalletPicker";
-import { connectWalletById, disconnectProvider, WalletId } from "./wallets";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { WalletPicker, WalletChoice } from "./components/WalletPicker";
 
-/* --- Icônes inline --- */
+/* ---------- Icônes inline ---------- */
 function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
@@ -33,7 +33,7 @@ function LogoMark(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-/* --- UI utils --- */
+/* ---------- Utilitaires UI ---------- */
 function Copy({ text }: { text: string }) {
   const [ok, setOk] = useState(false);
   return (
@@ -73,63 +73,76 @@ function MobileActionBar({ disabled, onSign }: { disabled: boolean; onSign: () =
   );
 }
 
-/* --- App (custom modal flow) --- */
+/* ---------- App ---------- */
 export default function App() {
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [connectedWith, setConnectedWith] = useState<WalletId | null>(null);
-  const [provider, setProvider] = useState<any>(null);
-  const [pubkey, setPubkey] = useState<string | null>(null);
+  const { connected, publicKey, signMessage, select, connect, disconnect, wallets } = useWallet();
 
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [msg, setMsg] = useState("I am proving I own this wallet on " + new Date().toISOString());
   const [sig, setSig] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const connected = !!provider && !!pubkey;
   const disabled = !connected || !msg.trim() || busy;
-  const shortKey = pubkey ?? undefined;
+  const shortKey = publicKey?.toBase58();
 
-  async function handlePick(id: WalletId) {
+  // Map entre nos labels et les adapter.name
+  const NAME_MAP: Record<WalletChoice, string> = {
+    Phantom: "Phantom",
+    Solflare: "Solflare",
+    Backpack: "Backpack",
+    Glow: "Glow",
+    Exodus: "Exodus",
+  };
+
+  async function handlePick(name: WalletChoice) {
     try {
-      const res = await connectWalletById(id);
-      if (!res) return; // redirigé vers install
-      setProvider(res.provider);
-      setPubkey(res.publicKey);
-      setConnectedWith(id);
+      const adapterName = NAME_MAP[name];
+      const exists = wallets.some((w) => w.adapter.name === adapterName);
+      if (!exists) {
+        // Si l'adapter n'est pas dispo (non installé), on ouvre la page d'install du wallet choisi
+        const links: Record<WalletChoice, string> = {
+          Phantom: "https://phantom.app/download",
+          Solflare: "https://solflare.com/download",
+          Backpack: "https://backpack.app/download",
+          Glow: "https://glow.app",
+          Exodus: "https://www.exodus.com/download/",
+        };
+        window.open(links[name], "_blank");
+        return;
+      }
+      select(adapterName);
+      await connect(); // déclenche le pop-up du wallet
       setPickerOpen(false);
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("connect error", e);
+      // l'utilisateur peut annuler; on ne spam pas d'alert
     }
   }
 
-  async function disconnect() {
-    await disconnectProvider(provider);
-    setProvider(null);
-    setPubkey(null);
-    setConnectedWith(null);
-  }
-
-  async function sign() {
-    if (!connected) {
+  async function onSign() {
+    if (!connected || !signMessage) {
       setPickerOpen(true);
-      return;
-    }
-    if (!provider?.signMessage) {
-      alert("Ce wallet ne supporte pas signMessage.");
       return;
     }
     setBusy(true);
     setSig(null);
     try {
       const encoded = new TextEncoder().encode(msg);
-      // certains wallets renvoient directement Uint8Array, d'autres { signature }
-      const res: any = await provider.signMessage(encoded, "utf8").catch(() => provider.signMessage(encoded));
-      const raw: Uint8Array = res?.signature ?? res;
+      const raw = await signMessage(encoded);
       setSig(bs58.encode(raw));
     } catch (e) {
       console.error(e);
-      alert("Signature annulée ou échouée.");
+      alert("Signature cancelled or failed.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function onDisconnect() {
+    try {
+      await disconnect();
+    } catch (e) {
+      console.warn("disconnect", e);
     }
   }
 
@@ -170,7 +183,7 @@ export default function App() {
               </button>
             ) : (
               <button
-                onClick={disconnect}
+                onClick={onDisconnect}
                 className="w-full md:w-auto rounded-xl px-4 py-3 text-sm font-medium bg-slate-700 text-slate-200 hover:bg-slate-600 transition"
               >
                 Disconnect
@@ -224,9 +237,11 @@ export default function App() {
               />
 
               <div className="mt-4 flex flex-col md:flex-row items-center gap-3 md:gap-4 justify-between">
-                <p className="text-xs text-slate-400 self-start">Tip: include a timestamp & domain to avoid replay.</p>
+                <p className="text-xs text-slate-400 self-start">
+                  Tip: include a timestamp & domain to avoid replay.
+                </p>
                 <button
-                  onClick={sign}
+                  onClick={onSign}
                   disabled={disabled}
                   className={`w-full md:w-auto rounded-xl px-4 py-3 text-sm font-semibold transition shadow-glow ${
                     disabled ? "bg-slate-700 text-slate-400 cursor-not-allowed" : "bg-sky-500 text-sky-950 hover:bg-sky-400"
@@ -274,28 +289,10 @@ export default function App() {
         </section>
 
         {/* Mobile bottom action bar */}
-        {connected && msg.trim().length > 0 && <MobileActionBar disabled={disabled} onSign={sign} />}
+        {connected && msg.trim().length > 0 && (
+          <MobileActionBar disabled={disabled} onSign={onSign} />
+        )}
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-slate-800/60">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 py-4 sm:py-6 text-sm text-slate-400 flex flex-wrap items-center justify-between gap-3">
-          <span>© {new Date().getFullYear()} SolanaSign</span>
-          <div className="flex items-center gap-4">
-            <a className="hover:text-slate-200" href="https://github.com/mjukilo/solanasign.io">GitHub</a>
-            <button
-              onClick={() => document.documentElement.classList.toggle("dark")}
-              className="rounded-xl border border-slate-700/60 px-3 py-1"
-              title="Toggle dark mode"
-            >
-              Toggle theme
-            </button>
-          </div>
-        </div>
-      </footer>
-
-      {/* Modal */}
-      <WalletPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={handlePick} />
-    </div>
-  );
-}
+      <footer className="relative z-10 border-t border-slate-800/60"
