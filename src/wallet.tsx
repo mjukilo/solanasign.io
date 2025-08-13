@@ -1,41 +1,87 @@
-import { FC, ReactNode, useMemo } from "react";
-import { clusterApiUrl } from "@solana/web3.js";
-import {
-  ConnectionProvider,
-  WalletProvider
-} from "@solana/wallet-adapter-react";
-import {
-  PhantomWalletAdapter,
-  SolflareWalletAdapter,
-  BackpackWalletAdapter,
-  GlowWalletAdapter,
-  ExodusWalletAdapter,
-  LedgerWalletAdapter
-} from "@solana/wallet-adapter-wallets";
-import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
+export type WalletId = "phantom" | "solflare" | "backpack" | "glow" | "exodus";
 
-const endpoint =
-  import.meta.env.VITE_SOLANA_RPC || clusterApiUrl("mainnet-beta");
-
-export const WalletKit: FC<{ children: ReactNode }> = ({ children }) => {
-  // Les adapters gèrent extensions, in-app (dApp browser) et deep-links mobiles quand c’est supporté.
-  const wallets = useMemo(
-    () => [
-      new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-      new BackpackWalletAdapter(),
-      new GlowWalletAdapter(),
-      new ExodusWalletAdapter(),
-      new LedgerWalletAdapter()
-    ],
-    []
-  );
-
-  return (
-    <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>{children}</WalletModalProvider>
-      </WalletProvider>
-    </ConnectionProvider>
-  );
+export type WalletInfo = {
+  id: WalletId;
+  label: string;
+  icon: string;
+  detect: () => any | null;
+  openInstall: () => void;
 };
+
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+export const WALLETS: WalletInfo[] = [
+  {
+    id: "phantom",
+    label: "Phantom",
+    icon: "https://assets.phantom.app/phantom-logo.png",
+    detect: () => (window.phantom?.solana && window.phantom.solana.isPhantom) || (window.solana?.isPhantom ? window.solana : null),
+    openInstall: () => {
+      const url = isMobile ? "https://phantom.app/" : "https://phantom.app/download";
+      window.open(url, "_blank");
+    },
+  },
+  {
+    id: "solflare",
+    label: "Solflare",
+    icon: "https://solflare.com/favicon-32x32.png",
+    detect: () => window.solflare ?? null,
+    openInstall: () => {
+      const url = isMobile ? "https://solflare.com/" : "https://solflare.com/download";
+      window.open(url, "_blank");
+    },
+  },
+  {
+    id: "backpack",
+    label: "Backpack",
+    icon: "https://backpack.app/favicon-32x32.png",
+    detect: () => window.backpack?.solana || (window.solana?.isBackpack ? window.solana : null),
+    openInstall: () => {
+      window.open("https://backpack.app/download", "_blank");
+    },
+  },
+  {
+    id: "glow",
+    label: "Glow",
+    icon: "https://glow.app/favicon-32x32.png",
+    detect: () => window.glow?.solana || (window.solana?.isGlow ? window.solana : null),
+    openInstall: () => {
+      window.open("https://glow.app", "_blank");
+    },
+  },
+  {
+    id: "exodus",
+    label: "Exodus",
+    icon: "https://www.exodus.com/assets/favicon-32x32.png",
+    detect: () => window.exodus?.solana || (window.solana?.isExodus ? window.solana : null),
+    openInstall: () => {
+      window.open("https://www.exodus.com/download/", "_blank");
+    },
+  },
+];
+
+export async function connectWalletById(id: WalletId): Promise<{ provider: any; publicKey: string } | null> {
+  const w = WALLETS.find((x) => x.id === id)!;
+  const provider = w.detect();
+  if (!provider) {
+    w.openInstall();
+    return null;
+  }
+  try {
+    const resp = await provider.connect({ onlyIfTrusted: false });
+    const pk = resp?.publicKey ?? provider.publicKey;
+    const pubkey = typeof pk?.toBase58 === "function" ? pk.toBase58() : typeof pk?.toString === "function" ? pk.toString() : String(pk);
+    return { provider, publicKey: pubkey };
+  } catch (e) {
+    console.error(`[connect:${id}]`, e);
+    throw e;
+  }
+}
+
+export async function disconnectProvider(provider: any) {
+  try {
+    await provider?.disconnect?.();
+  } catch (e) {
+    console.warn("disconnect error:", e);
+  }
+}
