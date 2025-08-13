@@ -73,7 +73,7 @@ function MobileActionBar({ disabled, onSign }: { disabled: boolean; onSign: () =
   );
 }
 
-/* --- App (custom modal flow) --- */
+/* --- App (modal custom) --- */
 export default function App() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [connectedWith, setConnectedWith] = useState<WalletId | null>(null);
@@ -91,7 +91,7 @@ export default function App() {
   async function handlePick(id: WalletId) {
     try {
       const res = await connectWalletById(id);
-      if (!res) return; // redirigé vers install
+      if (!res) return; // redirigé vers page d'installation
       setProvider(res.provider);
       setPubkey(res.publicKey);
       setConnectedWith(id);
@@ -121,7 +121,6 @@ export default function App() {
     setSig(null);
     try {
       const encoded = new TextEncoder().encode(msg);
-      // certains wallets renvoient directement Uint8Array, d'autres { signature }
       const res: any = await provider.signMessage(encoded, "utf8").catch(() => provider.signMessage(encoded));
       const raw: Uint8Array = res?.signature ?? res;
       setSig(bs58.encode(raw));
@@ -184,7 +183,7 @@ export default function App() {
       <main className="relative z-10">
         <section className="mx-auto max-w-6xl px-4 sm:px-6 py-10 md:py-16">
           <div className="grid md:grid-cols-2 gap-6 md:gap-8 items-stretch">
-            {/* Left column */}
+            {/* Left */}
             <div className="flex flex-col justify-center">
               <h1 className="text-3xl md:text-5xl font-semibold tracking-tight">
                 Prove wallet ownership
@@ -273,7 +272,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* Mobile bottom action bar */}
+        {/* Barre d’action mobile */}
         {connected && msg.trim().length > 0 && <MobileActionBar disabled={disabled} onSign={sign} />}
       </main>
 
