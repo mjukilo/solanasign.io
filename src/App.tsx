@@ -51,7 +51,6 @@ function scanGlow(): any | null {
   if (sol?.isGlow) return sol;
   if (sol && (sol.provider === "Glow" || sol.wallet === "Glow" || sol.name === "Glow")) return sol;
 
-  // certaines implémentations exotiques
   if ((w as any).glowSolana) return (w as any).glowSolana;
 
   return null;
@@ -60,14 +59,11 @@ function scanGlow(): any | null {
 /** Deep link + polling: comme dans le ZIP */
 async function deepLinkAndWaitGlow(timeoutMs = 5000): Promise<any | null> {
   try {
-    // scan immédiat
     let p = scanGlow();
     if (p) return p;
 
-    // lance le deep link (l’extension Glow intercepte glow://)
     (window as any).location.href = "glow://dapp/connect";
 
-    // polling jusqu’au timeout
     const started = Date.now();
     while (Date.now() - started < timeoutMs) {
       await delay(100);
@@ -127,7 +123,7 @@ const WALLETS: {
     id: "glow",
     label: "Glow",
     icon: glowIcon,
-    detect: () => scanGlow(), // deep link + polling se fait dans pickWallet si non présent
+    detect: () => scanGlow(),
     install: () => window.open("https://glow.app/download", "_blank"),
   },
   {
@@ -162,9 +158,10 @@ export default function App() {
   const [sig, setSig] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // UI states signature
+  // UI states signature / modal
   const [copied, setCopied] = useState(false);
   const [showSigModal, setShowSigModal] = useState(false);
+  const [modalMode, setModalMode] = useState<"signature" | "usecases">("signature");
 
   const connected = !!provider && !!pubkey;
   const disabled = !connected || !msg.trim() || busy;
@@ -174,8 +171,6 @@ export default function App() {
     const w = WALLETS.find((x) => x.id === id)!;
 
     let p = w.detect();
-
-    // 🔁 Spécial GLOW : si non détecté de suite, deep link + polling (Chrome)
     if (!p && id === "glow") {
       p = await deepLinkAndWaitGlow(5000);
     }
@@ -207,9 +202,9 @@ export default function App() {
     try { await provider?.disconnect?.(); } catch {}
     setProvider(null);
     setPubkey(null);
-    setSig(null);        // efface la signature à la déconnexion
+    setSig(null);
     setCopied(false);
-    setShowSigModal(false);
+    // on ne ferme pas forcément le modal ici
   }
 
   async function sign() {
@@ -224,7 +219,6 @@ export default function App() {
     setBusy(true);
     setSig(null);
     setCopied(false);
-    setShowSigModal(false);
     try {
       const encoded = new TextEncoder().encode(msg);
       const res: any = await provider.signMessage(encoded, "utf8").catch(() => provider.signMessage(encoded));
@@ -345,38 +339,41 @@ export default function App() {
                 <div className="mt-6">
                   <label className="block text-sm font-medium text-slate-300">Signature (bs58)</label>
 
-                  {/* --- Pastille compacte cliquable (copie) --- */}
+                  {/* ==== FULL-WIDTH clickable box (même largeur que textarea) ==== */}
                   <div
                     role="button"
                     tabIndex={0}
                     onClick={copySignature}
                     onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && copySignature()}
                     title="Click to copy"
-                    className="group mt-2 inline-flex max-w-full items-center gap-2 rounded-full border border-slate-700/70 bg-slate-800/60 px-3 py-2 text-sm text-slate-100 hover:bg-slate-800 transition cursor-pointer"
+                    className="relative mt-2 w-full rounded-xl border border-slate-700/60 bg-slate-800/60 p-3 text-xs
+                               break-all hover:bg-slate-800 outline-none focus:ring-4 focus:ring-brand.ring
+                               cursor-pointer transition"
                   >
-                    <span className="truncate">{shortSig(sig)}</span>
+                    {sig}
 
-                    {/* icône copy */}
-                    <span className="shrink-0 opacity-70 group-hover:opacity-100 transition" aria-hidden="true">
-                      <svg width="16" height="16" viewBox="0 0 24 24" className="text-slate-300">
-                        <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                      </svg>
-                    </span>
-
-                    {/* badge Copied */}
+                    {/* Badge Copied */}
                     <span
-                      className={`ml-1 select-none rounded-full bg-emerald-500 text-emerald-950 text-[10px] font-semibold px-2 py-[2px] shadow 
-                                  ${copied ? "opacity-100 scale-100" : "opacity-0 scale-90"} transition`}
+                      className={`pointer-events-none absolute -top-2 -right-2 select-none rounded-full 
+                                  bg-emerald-500 text-emerald-950 text-[10px] font-semibold px-2 py-[2px]
+                                  shadow ${copied ? 'opacity-100 scale-100' : 'opacity-0 scale-90'} transition`}
                       aria-hidden="true"
                     >
                       Copied!
                     </span>
+
+                    {/* Icône copy en bas à droite */}
+                    <div className="absolute right-2.5 bottom-2.5 opacity-70 hover:opacity-100 transition" aria-hidden="true">
+                      <svg width="16" height="16" viewBox="0 0 24 24" className="text-slate-300">
+                        <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                      </svg>
+                    </div>
                   </div>
 
-                  {/* Lien pour afficher la signature complète */}
+                  {/* Lien pour modal "Full signature" */}
                   <div className="mt-2 text-xs">
                     <button
-                      onClick={() => setShowSigModal(true)}
+                      onClick={() => { setModalMode("signature"); setShowSigModal(true); }}
                       className="underline decoration-dotted text-slate-400 hover:text-slate-200 transition"
                     >
                       View full signature
@@ -395,6 +392,16 @@ export default function App() {
           <span>© {new Date().getFullYear()} SolanaSign</span>
           <div className="flex items-center gap-4">
             <a className="hover:text-slate-200" href="https://github.com/mjukilo/solanasign.io">GitHub</a>
+
+            {/* 👇 Lien "Use cases" qui ouvre le MÊME modal */}
+            <button
+              onClick={() => { setModalMode("usecases"); setShowSigModal(true); }}
+              className="hover:text-slate-200 underline decoration-dotted"
+              title="Open use cases"
+            >
+              Use cases
+            </button>
+
             <button
               onClick={()=>document.documentElement.classList.toggle('dark')}
               className="rounded-xl border border-slate-700/60 px-3 py-1"
@@ -437,8 +444,8 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL: Full signature */}
-      {showSigModal && sig && (
+      {/* MÊME MODAL réutilisé pour "Full signature" ET "Use cases" */}
+      {showSigModal && (
         <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" onClick={() => setShowSigModal(false)}>
           <div className="absolute inset-0 bg-black/60" />
           <div
@@ -446,7 +453,9 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-800 px-5 py-3">
-              <div className="text-sm font-semibold">Full signature</div>
+              <div className="text-sm font-semibold">
+                {modalMode === "signature" ? "Full signature" : "Use cases"}
+              </div>
               <button
                 onClick={() => setShowSigModal(false)}
                 className="rounded-lg border border-slate-700/60 px-2.5 py-1 text-xs hover:bg-slate-800 transition"
@@ -455,37 +464,56 @@ export default function App() {
               </button>
             </div>
 
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={copySignature}
-              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && copySignature()}
-              title="Click to copy"
-              className="relative m-4 rounded-xl border border-slate-700/60 bg-slate-800/60 p-4 font-mono text-xs leading-relaxed break-all hover:bg-slate-800 outline-none focus:ring-4 focus:ring-brand.ring cursor-pointer transition"
-            >
-              {sig}
+            {modalMode === "signature" ? (
+              // ---- Contenu "Full signature"
+              sig ? (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={copySignature}
+                  onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && copySignature()}
+                  title="Click to copy"
+                  className="relative m-4 rounded-xl border border-slate-700/60 bg-slate-800/60 p-4 font-mono text-xs leading-relaxed break-all hover:bg-slate-800 outline-none focus:ring-4 focus:ring-brand.ring cursor-pointer transition"
+                >
+                  {sig}
 
-              {/* icône copy en bas à droite */}
-              <div className="absolute right-3 bottom-3 opacity-70 hover:opacity-100 transition" aria-hidden="true">
-                <svg width="16" height="16" viewBox="0 0 24 24" className="text-slate-300">
-                  <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                </svg>
+                  {/* icône copy en bas à droite */}
+                  <div className="absolute right-3 bottom-3 opacity-70 hover:opacity-100 transition" aria-hidden="true">
+                    <svg width="16" height="16" viewBox="0 0 24 24" className="text-slate-300">
+                      <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                    </svg>
+                  </div>
+
+                  {/* badge Copied */}
+                  <span
+                    className={`pointer-events-none absolute -top-2 -right-2 select-none rounded-full 
+                                bg-emerald-500 text-emerald-950 text-[10px] font-semibold px-2 py-[2px]
+                                shadow ${copied ? 'opacity-100 scale-100' : 'opacity-0 scale-90'} transition`}
+                    aria-hidden="true"
+                  >
+                    Copied!
+                  </span>
+                </div>
+              ) : (
+                <div className="m-4 text-sm text-slate-300">
+                  No signature yet. Sign a message to view it here.
+                </div>
+              )
+            ) : (
+              // ---- Contenu "Use cases"
+              <div className="m-4 text-sm text-slate-300 space-y-3">
+                <p className="text-slate-200 font-medium">Common use cases</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Prove ownership of a wallet (KYC-less login, support, community gates)</li>
+                  <li>Bind a wallet to a user account (account linking)</li>
+                  <li>Anti-fraud: sign challenges containing timestamp + domain (replay protection)</li>
+                  <li>Off-chain authorization for premium features or allow-lists</li>
+                </ul>
+                <p className="text-slate-400 text-xs">
+                  Tip: always verify the signature over the exact same message bytes (UTF-8) and decode signature from base58.
+                </p>
               </div>
-
-              {/* badge Copied */}
-              <span
-                className={`pointer-events-none absolute -top-2 -right-2 select-none rounded-full 
-                            bg-emerald-500 text-emerald-950 text-[10px] font-semibold px-2 py-[2px]
-                            shadow ${copied ? 'opacity-100 scale-100' : 'opacity-0 scale-90'} transition`}
-                aria-hidden="true"
-              >
-                Copied!
-              </span>
-            </div>
-
-            <div className="m-4 -mt-2 mb-5 text-[11px] text-slate-400">
-              Tip: click anywhere in the box to copy.
-            </div>
+            )}
           </div>
         </div>
       )}
