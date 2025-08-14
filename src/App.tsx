@@ -1,54 +1,97 @@
 import { useState } from "react";
 import bs58 from "bs58";
 
-/** Providers simples via window.* (Phantom, Solflare, Glow, Exodus, Backpack) **/
+/* ==== ICÔNES LOCALES (depuis src/assets) ==== */
+import phantomLogo from "./assets/phantom_logo.svg";
+import solflareLogo from "./assets/solflare_logo.svg";
+import backpackLogo from "./assets/backpack_logo.svg";
+import glowLogo from "./assets/glow.svg";
+import exodusLogo from "./assets/exodus.svg";
+
+/* ==== Types simples ==== */
 type WalletId = "phantom" | "solflare" | "glow" | "exodus" | "backpack";
+
+/* ==== Détection basique via window.* ==== */
+declare global {
+  interface Window {
+    solana?: any;
+    phantom?: { solana?: any };
+    solflare?: any;
+    backpack?: { solana?: any };
+    glow?: { solana?: any };
+    exodus?: { solana?: any };
+  }
+}
 
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-const WALLETS: { id: WalletId; label: string; icon: string; detect: () => any | null; install: () => void }[] = [
+/** Helpers: extraction fiable de la pubkey (Base58 si dispo) */
+function toPubkeyString(pk: any): string | null {
+  if (!pk) return null;
+  try {
+    if (typeof pk.toBase58 === "function") return pk.toBase58();
+    if (typeof pk.toString === "function") return pk.toString();
+    return String(pk);
+  } catch {
+    return null;
+  }
+}
+
+/** Détections wallets */
+const WALLETS: {
+  id: WalletId;
+  label: string;
+  icon: string; // chemin importé
+  detect: () => any | null;
+  install: () => void;
+}[] = [
   {
     id: "phantom",
     label: "Phantom",
-    icon: "https://assets.phantom.app/phantom-logo.png",
-    detect: () =>
-      (window.phantom?.solana && window.phantom.solana.isPhantom) ||
-      (window.solana?.isPhantom ? window.solana : null),
+    icon: phantomLogo,
+    // ✅ Correction: on vérifie d'abord window.phantom.solana, puis window.solana.isPhantom
+    detect: () => {
+      const p1 = window.phantom?.solana;
+      if (p1?.isPhantom) return p1;
+      const p2 = window.solana;
+      if (p2?.isPhantom) return p2;
+      return null;
+    },
     install: () => window.open(isMobile ? "https://phantom.app/" : "https://phantom.app/download", "_blank"),
   },
   {
     id: "solflare",
     label: "Solflare",
-    icon: "https://solflare.com/favicon-32x32.png",
-    detect: () => (window as any).solflare ?? null,
+    icon: solflareLogo,
+    detect: () => window.solflare ?? null,
     install: () => window.open(isMobile ? "https://solflare.com/" : "https://solflare.com/download", "_blank"),
+  },
+  {
+    id: "backpack",
+    label: "Backpack",
+    icon: backpackLogo,
+    detect: () => window.backpack?.solana || (window.solana?.isBackpack ? window.solana : null),
+    install: () => window.open("https://backpack.app/download", "_blank"),
   },
   {
     id: "glow",
     label: "Glow",
-    icon: "https://glow.app/favicon-32x32.png",
+    icon: glowLogo,
     detect: () => {
-      const p = (window as any).glow?.solana || (window as any).solana;
-      return p && (p.isGlow || p?.provider === "Glow") ? p : null;
+      const p = window.glow?.solana || window.solana;
+      return p && (p.isGlow || (p as any)?.provider === "Glow") ? p : null;
     },
     install: () => window.open("https://glow.app/download", "_blank"),
   },
   {
     id: "exodus",
     label: "Exodus",
-    icon: "https://www.exodus.com/assets/favicon-32x32.png",
+    icon: exodusLogo,
     detect: () => {
-      const p = (window as any).exodus?.solana || (window as any).solana;
-      return p && (p.isExodus || p?.provider === "Exodus") ? p : null;
+      const p = window.exodus?.solana || window.solana;
+      return p && (p.isExodus || (p as any)?.provider === "Exodus") ? p : null;
     },
     install: () => window.open("https://www.exodus.com/download/", "_blank"),
-  },
-  {
-    id: "backpack",
-    label: "Backpack",
-    icon: "https://backpack.app/favicon-32x32.png",
-    detect: () => (window as any).backpack?.solana || ((window as any).solana?.isBackpack ? (window as any).solana : null),
-    install: () => window.open("https://backpack.app/download", "_blank"),
   },
 ];
 
@@ -73,16 +116,27 @@ export default function App() {
       return;
     }
     try {
+      // Certaines versions renvoient { publicKey }, d'autres rien et il faut lire p.publicKey
       const resp = await p.connect?.({ onlyIfTrusted: false });
-      const pk = resp?.publicKey ?? p.publicKey;
-      const pub =
-        typeof pk?.toBase58 === "function" ? pk.toBase58()
-        : typeof pk?.toString === "function" ? pk.toString()
-        : String(pk);
+      const respPk = resp?.publicKey;
+      const providerPk = p.publicKey;
+
+      // On essaye dans l'ordre: réponse → provider → dernier recours en relisant p.publicKey après un tick
+      let pub =
+        toPubkeyString(respPk) ||
+        toPubkeyString(providerPk);
+
+      if (!pub) {
+        await new Promise((r) => setTimeout(r, 0));
+        pub = toPubkeyString(p.publicKey);
+      }
+      if (!pub) throw new Error("No publicKey returned by provider");
+
       setProvider(p);
       setPubkey(pub);
-    } catch {
-      // cancel/deny
+    } catch (e) {
+      // connexion annulée/refusée
+      console.warn("connect error", e);
     }
   }
 
@@ -118,10 +172,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen relative overflow-hidden">
-      {/* ===== BACKGROUND ===== 
-           - motif grid
-           - dégradé RADIAL positionné VERS le bouton (top-right / 90% 0)
-      */}
+      {/* ===== BACKGROUND : grid + dégradé orienté vers le bouton (top-right) ===== */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute inset-0 bg-grid bg-[length:22px_22px]" />
         <div className="absolute inset-0 bg-[radial-gradient(70rem_60rem_at_90%_0%,rgba(14,165,233,.22),transparent_60%)]" />
@@ -260,7 +311,7 @@ export default function App() {
         </div>
       </footer>
 
-      {/* ===== MODAL PICKER (overlay) ===== */}
+      {/* ===== MODAL PICKER (overlay) — icônes locales ===== */}
       {pickerOpen && (
         <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" onClick={() => setPickerOpen(false)}>
           <div className="absolute inset-0 bg-black/60" />
@@ -276,7 +327,7 @@ export default function App() {
                   onClick={() => pickWallet(w.id)}
                   className="flex items-center gap-3 rounded-xl border border-slate-700/70 bg-slate-800/50 px-3 py-3 text-left hover:bg-slate-800 transition"
                 >
-                  <img src={w.icon} alt={w.label} className="h-7 w-7 rounded-md object-cover" />
+                  <img src={w.icon} alt={w.label} className="h-7 w-7 rounded-md object-contain" />
                   <div>
                     <div className="text-sm font-medium">{w.label}</div>
                     <div className="text-xs text-slate-400">Extension / Mobile app</div>
