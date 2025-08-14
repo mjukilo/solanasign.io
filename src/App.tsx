@@ -18,6 +18,49 @@ function toPubkeyString(pk: any): string | null {
   }
 }
 
+/** helper: petit sleep */
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** détection Glow robuste (multi-providers + retries) */
+async function detectGlowProvider(): Promise<any | null> {
+  const w = window as any;
+
+  const scan = () => {
+    // 1) priorité à l’injection dédiée
+    if (w.glow?.solana) return w.glow.solana;
+
+    // 2) tableau de providers (plusieurs wallets coexistent)
+    const sol = w.solana;
+    const list: any[] = Array.isArray(sol?.providers) ? sol.providers : [];
+    if (list.length) {
+      const byFlag = list.find((p) => p?.isGlow);
+      if (byFlag) return byFlag;
+      const byName = list.find(
+        (p) => p?.provider === "Glow" || p?.wallet === "Glow" || p?.name === "Glow"
+      );
+      if (byName) return byName;
+    }
+
+    // 3) provider unique
+    if (sol?.isGlow) return sol;
+    if (sol && (sol.provider === "Glow" || sol.wallet === "Glow" || sol.name === "Glow")) return sol;
+
+    return null;
+  };
+
+  // essai immédiat
+  let p = scan();
+  if (p) return p;
+
+  // retries rapides (10x toutes 50ms ~ 500ms)
+  for (let i = 0; i < 10; i++) {
+    await delay(50);
+    p = scan();
+    if (p) return p;
+  }
+  return null;
+}
+
 const WALLETS: {
   id: WalletId;
   label: string;
@@ -49,13 +92,19 @@ const WALLETS: {
     id: "glow",
     label: "Glow",
     icon: "https://glow.app/favicon-32x32.png",
+    // détection synchrone rapide; si null on fera un retry asynchrone dans pickWallet
     detect: () => {
-      const w = window as any;
-      // ✅ priorité à l’injection dédiée
+      const w: any = window;
       if (w.glow?.solana) return w.glow.solana;
-      // anciennes / variantes
-      if (w.solana?.isGlow) return w.solana;
-      if (w.solana && (w.solana.provider === "Glow" || w.solana.wallet === "Glow")) return w.solana;
+      const sol = w.solana;
+      if (Array.isArray(sol?.providers)) {
+        const p =
+          sol.providers.find((x: any) => x?.isGlow) ||
+          sol.providers.find((x: any) => x?.provider === "Glow" || x?.wallet === "Glow" || x?.name === "Glow");
+        if (p) return p;
+      }
+      if (sol?.isGlow) return sol;
+      if (sol && (sol.provider === "Glow" || sol.wallet === "Glow" || sol.name === "Glow")) return sol;
       return null;
     },
     install: () => window.open("https://glow.app/download", "_blank"),
@@ -120,19 +169,25 @@ export default function App() {
   async function pickWallet(id: WalletId) {
     setPickerOpen(false);
     const w = WALLETS.find((x) => x.id === id)!;
-    const p = w.detect();
+
+    // 🔁 si Glow n’est pas injecté immédiatement, on attend jusqu’à ~500ms
+    let p = w.detect();
+    if (!p && id === "glow") {
+      p = await detectGlowProvider();
+    }
+
     if (!p) {
       w.install();
       return;
     }
+
     try {
       const resp = await connectWithCompat(p);
       const pub =
         toPubkeyString(resp?.publicKey) ||
         toPubkeyString(p.publicKey) ||
         (await (async () => {
-          // mini délai pour laisser le provider peu réactif maj son state
-          await new Promise((r) => setTimeout(r, 0));
+          await new Promise((r) => setTimeout(r, 0)); // tick pour laisser le provider maj son state
           return toPubkeyString(p.publicKey);
         })());
 
