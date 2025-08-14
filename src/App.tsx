@@ -7,6 +7,7 @@ import solflareIcon from "./assets/solflare.svg";
 import glowIcon from "./assets/glow.svg";
 import exodusIcon from "./assets/exodus.svg";
 import backpackIcon from "./assets/backpack.svg";
+import solanasignLogo from "./assets/solanasign-logo.svg";
 
 type WalletId = "phantom" | "solflare" | "glow" | "exodus" | "backpack";
 
@@ -253,7 +254,7 @@ export default function App() {
       <header className="relative z-10">
         <div className="mx-auto max-w-6xl px-4 py-4 md:py-6 flex items-center justify-between gap-3">
           <a href="/" className="flex items-center gap-3">
-            <img src="/favicon.svg" alt="SolanaSign" className="h-9 w-9 rounded-xl ring-1 ring-sky-400/30" />
+            <img src="/solanasign-logo.png" alt="SolanaSign" className="h-9 w-9 rounded-xl ring-1 ring-sky-400/30" />
             <div>
               <p className="text-lg font-semibold tracking-tight">SolanaSign</p>
               <p className="text-xs text-slate-400 -mt-1">Sign a message • Prove ownership</p>
