@@ -1,12 +1,17 @@
 import { useState } from "react";
 import bs58 from "bs58";
 
-/** Providers simples via window.* (Phantom, Solflare, Glow, Exodus, Backpack) **/
+// 🖼️ Import local icons
+import phantomIcon from "./assets/phantom.svg";
+import solflareIcon from "./assets/solflare.svg";
+import glowIcon from "./assets/glow.svg";
+import exodusIcon from "./assets/exodus.svg";
+import backpackIcon from "./assets/backpack.svg";
+
 type WalletId = "phantom" | "solflare" | "glow" | "exodus" | "backpack";
 
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-/** helper: conversion fiable de la pubkey en string */
 function toPubkeyString(pk: any): string | null {
   if (!pk) return null;
   try {
@@ -18,18 +23,12 @@ function toPubkeyString(pk: any): string | null {
   }
 }
 
-/** helper: petit sleep */
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** détection Glow robuste (multi-providers + retries) */
 async function detectGlowProvider(): Promise<any | null> {
   const w = window as any;
-
   const scan = () => {
-    // 1) priorité à l’injection dédiée
     if (w.glow?.solana) return w.glow.solana;
-
-    // 2) tableau de providers (plusieurs wallets coexistent)
     const sol = w.solana;
     const list: any[] = Array.isArray(sol?.providers) ? sol.providers : [];
     if (list.length) {
@@ -40,19 +39,12 @@ async function detectGlowProvider(): Promise<any | null> {
       );
       if (byName) return byName;
     }
-
-    // 3) provider unique
     if (sol?.isGlow) return sol;
     if (sol && (sol.provider === "Glow" || sol.wallet === "Glow" || sol.name === "Glow")) return sol;
-
     return null;
   };
-
-  // essai immédiat
   let p = scan();
   if (p) return p;
-
-  // retries rapides (10x toutes 50ms ~ 500ms)
   for (let i = 0; i < 10; i++) {
     await delay(50);
     p = scan();
@@ -71,7 +63,7 @@ const WALLETS: {
   {
     id: "phantom",
     label: "Phantom",
-    icon: "https://assets.phantom.app/phantom-logo.png",
+    icon: phantomIcon,
     detect: () => {
       const p1 = (window as any).phantom?.solana;
       if (p1?.isPhantom) return p1;
@@ -84,15 +76,14 @@ const WALLETS: {
   {
     id: "solflare",
     label: "Solflare",
-    icon: "https://solflare.com/favicon-32x32.png",
+    icon: solflareIcon,
     detect: () => (window as any).solflare ?? null,
     install: () => window.open(isMobile ? "https://solflare.com/" : "https://solflare.com/download", "_blank"),
   },
   {
     id: "glow",
     label: "Glow",
-    icon: "https://glow.app/favicon-32x32.png",
-    // détection synchrone rapide; si null on fera un retry asynchrone dans pickWallet
+    icon: glowIcon,
     detect: () => {
       const w: any = window;
       if (w.glow?.solana) return w.glow.solana;
@@ -112,7 +103,7 @@ const WALLETS: {
   {
     id: "exodus",
     label: "Exodus",
-    icon: "https://www.exodus.com/assets/favicon-32x32.png",
+    icon: exodusIcon,
     detect: () => {
       const w = window as any;
       const p = w.exodus?.solana || w.solana;
@@ -123,7 +114,7 @@ const WALLETS: {
   {
     id: "backpack",
     label: "Backpack",
-    icon: "https://backpack.app/favicon-32x32.png",
+    icon: backpackIcon,
     detect: () => {
       const w = window as any;
       return w.backpack?.solana || (w.solana?.isBackpack ? w.solana : null);
