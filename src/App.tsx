@@ -196,11 +196,16 @@ export default function App() {
     }
   }
 
-  async function disconnect() {
-    try { await provider?.disconnect?.(); } catch {}
-    setProvider(null);
-    setPubkey(null);
-  }
+async function disconnect() {
+  try { 
+    await provider?.disconnect?.(); 
+  } catch {}
+
+  setProvider(null);
+  setPubkey(null);
+  setSig(null); // <-- 🔑 réinitialise la signature
+}
+
 
   async function sign() {
     if (!connected) {
