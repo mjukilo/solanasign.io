@@ -1,7 +1,7 @@
 import { useState } from "react";
 import bs58 from "bs58";
 
-// 🖼️ Import local icons
+// 🖼️ Icônes locales
 import phantomIcon from "./assets/phantom.svg";
 import solflareIcon from "./assets/solflare.svg";
 import glowIcon from "./assets/glow.svg";
@@ -12,6 +12,7 @@ type WalletId = "phantom" | "solflare" | "glow" | "exodus" | "backpack";
 
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
+/** helper: conversion fiable de la pubkey en string */
 function toPubkeyString(pk: any): string | null {
   if (!pk) return null;
   try {
@@ -23,34 +24,73 @@ function toPubkeyString(pk: any): string | null {
   }
 }
 
+/** helpers */
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function detectGlowProvider(): Promise<any | null> {
+/** Scan "Glow" dans window (multi-providers inclus) */
+function scanGlow(): any | null {
   const w = window as any;
-  const scan = () => {
-    if (w.glow?.solana) return w.glow.solana;
-    const sol = w.solana;
-    const list: any[] = Array.isArray(sol?.providers) ? sol.providers : [];
-    if (list.length) {
-      const byFlag = list.find((p) => p?.isGlow);
-      if (byFlag) return byFlag;
-      const byName = list.find(
-        (p) => p?.provider === "Glow" || p?.wallet === "Glow" || p?.name === "Glow"
-      );
-      if (byName) return byName;
-    }
-    if (sol?.isGlow) return sol;
-    if (sol && (sol.provider === "Glow" || sol.wallet === "Glow" || sol.name === "Glow")) return sol;
-    return null;
-  };
-  let p = scan();
-  if (p) return p;
-  for (let i = 0; i < 10; i++) {
-    await delay(50);
-    p = scan();
-    if (p) return p;
+  if (w.glow?.solana) return w.glow.solana;
+
+  const sol = w.solana;
+  const list: any[] = Array.isArray(sol?.providers) ? sol.providers : [];
+
+  if (list.length) {
+    const byFlag = list.find((p) => p?.isGlow);
+    if (byFlag) return byFlag;
+    const byName = list.find(
+      (p) => p?.provider === "Glow" || p?.wallet === "Glow" || p?.name === "Glow"
+    );
+    if (byName) return byName;
   }
+
+  if (sol?.isGlow) return sol;
+  if (sol && (sol.provider === "Glow" || sol.wallet === "Glow" || sol.name === "Glow")) return sol;
+
+  // certains set window.glowSolana
+  if (w.glowSolana) return w.glowSolana;
+
   return null;
+}
+
+/** Deep link + polling: comme dans ton ZIP */
+async function deepLinkAndWaitGlow(timeoutMs = 5000): Promise<any | null> {
+  try {
+    // on tente d'abord un scan immédiat
+    let p = scanGlow();
+    if (p) return p;
+
+    // lance le deep link (l’extension Glow intercepte glow://)
+    // NOTE: on préfère location.href pour laisser Chrome déclencher le handler
+    (window as any).location.href = "glow://dapp/connect";
+
+    // polling jusqu’à timeout
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      await delay(100);
+      p = scanGlow();
+      if (p) return p;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** compat de connexion: avec/ sans options, puis request() */
+async function connectWithCompat(p: any) {
+  try {
+    const r = await p.connect?.({ onlyIfTrusted: false });
+    return r;
+  } catch {
+    try {
+      const r2 = await p.connect?.();
+      return r2;
+    } catch {
+      const r3 = await p.request?.({ method: "connect" });
+      return r3;
+    }
+  }
 }
 
 const WALLETS: {
@@ -84,20 +124,7 @@ const WALLETS: {
     id: "glow",
     label: "Glow",
     icon: glowIcon,
-    detect: () => {
-      const w: any = window;
-      if (w.glow?.solana) return w.glow.solana;
-      const sol = w.solana;
-      if (Array.isArray(sol?.providers)) {
-        const p =
-          sol.providers.find((x: any) => x?.isGlow) ||
-          sol.providers.find((x: any) => x?.provider === "Glow" || x?.wallet === "Glow" || x?.name === "Glow");
-        if (p) return p;
-      }
-      if (sol?.isGlow) return sol;
-      if (sol && (sol.provider === "Glow" || sol.wallet === "Glow" || sol.name === "Glow")) return sol;
-      return null;
-    },
+    detect: () => scanGlow(), // synchrone rapide; deep link se fait dans pickWallet
     install: () => window.open("https://glow.app/download", "_blank"),
   },
   {
@@ -135,36 +162,15 @@ export default function App() {
   const connected = !!provider && !!pubkey;
   const disabled = !connected || !msg.trim() || busy;
 
-  async function connectWithCompat(p: any) {
-    // Tentative 1: connect avec option
-    try {
-      const r = await p.connect?.({ onlyIfTrusted: false });
-      return r;
-    } catch {
-      // Tentative 2: connect sans option (Glow/versions anciennes)
-      try {
-        const r2 = await p.connect?.();
-        return r2;
-      } catch {
-        // Tentative 3: request API (certains providers)
-        try {
-          const r3 = await p.request?.({ method: "connect" });
-          return r3;
-        } catch {
-          throw new Error("connect failed");
-        }
-      }
-    }
-  }
-
   async function pickWallet(id: WalletId) {
     setPickerOpen(false);
     const w = WALLETS.find((x) => x.id === id)!;
 
-    // 🔁 si Glow n’est pas injecté immédiatement, on attend jusqu’à ~500ms
     let p = w.detect();
+
+    // 🔁 Spécial GLOW : si non détecté de suite, on deep link + polling (comme le ZIP)
     if (!p && id === "glow") {
-      p = await detectGlowProvider();
+      p = await deepLinkAndWaitGlow(5000); // attend jusqu’à ~5s
     }
 
     if (!p) {
@@ -178,7 +184,7 @@ export default function App() {
         toPubkeyString(resp?.publicKey) ||
         toPubkeyString(p.publicKey) ||
         (await (async () => {
-          await new Promise((r) => setTimeout(r, 0)); // tick pour laisser le provider maj son state
+          await delay(0);
           return toPubkeyString(p.publicKey);
         })());
 
@@ -186,7 +192,6 @@ export default function App() {
       setProvider(p);
       setPubkey(pub);
     } catch (e) {
-      // cancel/deny
       console.warn(`${id} connect error`, e);
     }
   }
@@ -378,7 +383,7 @@ export default function App() {
                   onClick={() => pickWallet(w.id)}
                   className="flex items-center gap-3 rounded-xl border border-slate-700/70 bg-slate-800/50 px-3 py-3 text-left hover:bg-slate-800 transition"
                 >
-                  <img src={w.icon} alt={w.label} className="h-7 w-7 rounded-md object-cover" />
+                  <img src={w.icon} alt={w.label} className="h-7 w-7 rounded-md object-contain" />
                   <div>
                     <div className="text-sm font-medium">{w.label}</div>
                     <div className="text-xs text-slate-400">Extension / Mobile app</div>
