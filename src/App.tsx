@@ -1,31 +1,12 @@
 import { useState } from "react";
 import bs58 from "bs58";
 
-/* ==== ICÔNES LOCALES (depuis src/assets) ==== */
-import phantomLogo from "./assets/phantom_logo.svg";
-import solflareLogo from "./assets/solflare_logo.svg";
-import backpackLogo from "./assets/backpack_logo.svg";
-import glowLogo from "./assets/glow.svg";
-import exodusLogo from "./assets/exodus.svg";
-
-/* ==== Types simples ==== */
+/** Providers simples via window.* (Phantom, Solflare, Glow, Exodus, Backpack) **/
 type WalletId = "phantom" | "solflare" | "glow" | "exodus" | "backpack";
-
-/* ==== Détection basique via window.* ==== */
-declare global {
-  interface Window {
-    solana?: any;
-    phantom?: { solana?: any };
-    solflare?: any;
-    backpack?: { solana?: any };
-    glow?: { solana?: any };
-    exodus?: { solana?: any };
-  }
-}
 
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-/** Helpers: extraction fiable de la pubkey (Base58 si dispo) */
+/** helper: conversion fiable de la pubkey en string */
 function toPubkeyString(pk: any): string | null {
   if (!pk) return null;
   try {
@@ -37,23 +18,21 @@ function toPubkeyString(pk: any): string | null {
   }
 }
 
-/** Détections wallets */
 const WALLETS: {
   id: WalletId;
   label: string;
-  icon: string; // chemin importé
+  icon: string;
   detect: () => any | null;
   install: () => void;
 }[] = [
   {
     id: "phantom",
     label: "Phantom",
-    icon: phantomLogo,
-    // ✅ Correction: on vérifie d'abord window.phantom.solana, puis window.solana.isPhantom
+    icon: "https://assets.phantom.app/phantom-logo.png",
     detect: () => {
-      const p1 = window.phantom?.solana;
+      const p1 = (window as any).phantom?.solana;
       if (p1?.isPhantom) return p1;
-      const p2 = window.solana;
+      const p2 = (window as any).solana;
       if (p2?.isPhantom) return p2;
       return null;
     },
@@ -62,36 +41,45 @@ const WALLETS: {
   {
     id: "solflare",
     label: "Solflare",
-    icon: solflareLogo,
-    detect: () => window.solflare ?? null,
+    icon: "https://solflare.com/favicon-32x32.png",
+    detect: () => (window as any).solflare ?? null,
     install: () => window.open(isMobile ? "https://solflare.com/" : "https://solflare.com/download", "_blank"),
-  },
-  {
-    id: "backpack",
-    label: "Backpack",
-    icon: backpackLogo,
-    detect: () => window.backpack?.solana || (window.solana?.isBackpack ? window.solana : null),
-    install: () => window.open("https://backpack.app/download", "_blank"),
   },
   {
     id: "glow",
     label: "Glow",
-    icon: glowLogo,
+    icon: "https://glow.app/favicon-32x32.png",
     detect: () => {
-      const p = window.glow?.solana || window.solana;
-      return p && (p.isGlow || (p as any)?.provider === "Glow") ? p : null;
+      const w = window as any;
+      // ✅ priorité à l’injection dédiée
+      if (w.glow?.solana) return w.glow.solana;
+      // anciennes / variantes
+      if (w.solana?.isGlow) return w.solana;
+      if (w.solana && (w.solana.provider === "Glow" || w.solana.wallet === "Glow")) return w.solana;
+      return null;
     },
     install: () => window.open("https://glow.app/download", "_blank"),
   },
   {
     id: "exodus",
     label: "Exodus",
-    icon: exodusLogo,
+    icon: "https://www.exodus.com/assets/favicon-32x32.png",
     detect: () => {
-      const p = window.exodus?.solana || window.solana;
-      return p && (p.isExodus || (p as any)?.provider === "Exodus") ? p : null;
+      const w = window as any;
+      const p = w.exodus?.solana || w.solana;
+      return p && (p.isExodus || p?.provider === "Exodus") ? p : null;
     },
     install: () => window.open("https://www.exodus.com/download/", "_blank"),
+  },
+  {
+    id: "backpack",
+    label: "Backpack",
+    icon: "https://backpack.app/favicon-32x32.png",
+    detect: () => {
+      const w = window as any;
+      return w.backpack?.solana || (w.solana?.isBackpack ? w.solana : null);
+    },
+    install: () => window.open("https://backpack.app/download", "_blank"),
   },
 ];
 
@@ -107,6 +95,28 @@ export default function App() {
   const connected = !!provider && !!pubkey;
   const disabled = !connected || !msg.trim() || busy;
 
+  async function connectWithCompat(p: any) {
+    // Tentative 1: connect avec option
+    try {
+      const r = await p.connect?.({ onlyIfTrusted: false });
+      return r;
+    } catch {
+      // Tentative 2: connect sans option (Glow/versions anciennes)
+      try {
+        const r2 = await p.connect?.();
+        return r2;
+      } catch {
+        // Tentative 3: request API (certains providers)
+        try {
+          const r3 = await p.request?.({ method: "connect" });
+          return r3;
+        } catch {
+          throw new Error("connect failed");
+        }
+      }
+    }
+  }
+
   async function pickWallet(id: WalletId) {
     setPickerOpen(false);
     const w = WALLETS.find((x) => x.id === id)!;
@@ -116,27 +126,22 @@ export default function App() {
       return;
     }
     try {
-      // Certaines versions renvoient { publicKey }, d'autres rien et il faut lire p.publicKey
-      const resp = await p.connect?.({ onlyIfTrusted: false });
-      const respPk = resp?.publicKey;
-      const providerPk = p.publicKey;
+      const resp = await connectWithCompat(p);
+      const pub =
+        toPubkeyString(resp?.publicKey) ||
+        toPubkeyString(p.publicKey) ||
+        (await (async () => {
+          // mini délai pour laisser le provider peu réactif maj son state
+          await new Promise((r) => setTimeout(r, 0));
+          return toPubkeyString(p.publicKey);
+        })());
 
-      // On essaye dans l'ordre: réponse → provider → dernier recours en relisant p.publicKey après un tick
-      let pub =
-        toPubkeyString(respPk) ||
-        toPubkeyString(providerPk);
-
-      if (!pub) {
-        await new Promise((r) => setTimeout(r, 0));
-        pub = toPubkeyString(p.publicKey);
-      }
-      if (!pub) throw new Error("No publicKey returned by provider");
-
+      if (!pub) throw new Error("No publicKey from provider");
       setProvider(p);
       setPubkey(pub);
     } catch (e) {
-      // connexion annulée/refusée
-      console.warn("connect error", e);
+      // cancel/deny
+      console.warn(`${id} connect error`, e);
     }
   }
 
@@ -172,13 +177,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen relative overflow-hidden">
-      {/* ===== BACKGROUND : grid + dégradé orienté vers le bouton (top-right) ===== */}
+      {/* BACKGROUND */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute inset-0 bg-grid bg-[length:22px_22px]" />
         <div className="absolute inset-0 bg-[radial-gradient(70rem_60rem_at_90%_0%,rgba(14,165,233,.22),transparent_60%)]" />
       </div>
 
-      {/* ===== HEADER ===== */}
+      {/* HEADER */}
       <header className="relative z-10">
         <div className="mx-auto max-w-6xl px-4 py-4 md:py-6 flex items-center justify-between gap-3">
           <a href="/" className="flex items-center gap-3">
@@ -214,7 +219,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* ===== HERO + CARD ===== */}
+      {/* HERO + CARD */}
       <main className="relative z-10">
         <section className="mx-auto max-w-6xl px-4 py-10 md:py-16">
           <div className="grid md:grid-cols-2 gap-8 items-stretch">
@@ -294,7 +299,7 @@ export default function App() {
         </section>
       </main>
 
-      {/* ===== FOOTER ===== */}
+      {/* FOOTER */}
       <footer className="relative z-10 border-t border-slate-800/60">
         <div className="mx-auto max-w-6xl px-4 py-6 text-sm text-slate-400 flex flex-wrap items-center justify-between gap-3">
           <span>© {new Date().getFullYear()} SolanaSign</span>
@@ -311,7 +316,7 @@ export default function App() {
         </div>
       </footer>
 
-      {/* ===== MODAL PICKER (overlay) — icônes locales ===== */}
+      {/* MODAL PICKER */}
       {pickerOpen && (
         <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" onClick={() => setPickerOpen(false)}>
           <div className="absolute inset-0 bg-black/60" />
@@ -327,7 +332,7 @@ export default function App() {
                   onClick={() => pickWallet(w.id)}
                   className="flex items-center gap-3 rounded-xl border border-slate-700/70 bg-slate-800/50 px-3 py-3 text-left hover:bg-slate-800 transition"
                 >
-                  <img src={w.icon} alt={w.label} className="h-7 w-7 rounded-md object-contain" />
+                  <img src={w.icon} alt={w.label} className="h-7 w-7 rounded-md object-cover" />
                   <div>
                     <div className="text-sm font-medium">{w.label}</div>
                     <div className="text-xs text-slate-400">Extension / Mobile app</div>
