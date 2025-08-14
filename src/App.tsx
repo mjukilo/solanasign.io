@@ -154,7 +154,7 @@ export default function App() {
   const [pubkey, setPubkey] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const [msg, setMsg] = useState("I am proving I own this wallet on " + new Date().toISOString());
+  const [msg, setMsg] = useState("");
   const [sig, setSig] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
