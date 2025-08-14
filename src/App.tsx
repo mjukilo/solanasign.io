@@ -47,24 +47,23 @@ function scanGlow(): any | null {
   if (sol?.isGlow) return sol;
   if (sol && (sol.provider === "Glow" || sol.wallet === "Glow" || sol.name === "Glow")) return sol;
 
-  // certains set window.glowSolana
-  if (w.glowSolana) return w.glowSolana;
+  // certaines implémentations exotiques
+  if ((w as any).glowSolana) return (w as any).glowSolana;
 
   return null;
 }
 
-/** Deep link + polling: comme dans ton ZIP */
+/** Deep link + polling: comme dans le ZIP */
 async function deepLinkAndWaitGlow(timeoutMs = 5000): Promise<any | null> {
   try {
-    // on tente d'abord un scan immédiat
+    // scan immédiat
     let p = scanGlow();
     if (p) return p;
 
     // lance le deep link (l’extension Glow intercepte glow://)
-    // NOTE: on préfère location.href pour laisser Chrome déclencher le handler
     (window as any).location.href = "glow://dapp/connect";
 
-    // polling jusqu’à timeout
+    // polling jusqu’au timeout
     const started = Date.now();
     while (Date.now() - started < timeoutMs) {
       await delay(100);
@@ -77,7 +76,7 @@ async function deepLinkAndWaitGlow(timeoutMs = 5000): Promise<any | null> {
   }
 }
 
-/** compat de connexion: avec/ sans options, puis request() */
+/** compat de connexion: avec/sans options, puis request() */
 async function connectWithCompat(p: any) {
   try {
     const r = await p.connect?.({ onlyIfTrusted: false });
@@ -124,7 +123,7 @@ const WALLETS: {
     id: "glow",
     label: "Glow",
     icon: glowIcon,
-    detect: () => scanGlow(), // synchrone rapide; deep link se fait dans pickWallet
+    detect: () => scanGlow(), // deep link + polling se fait dans pickWallet si non présent
     install: () => window.open("https://glow.app/download", "_blank"),
   },
   {
@@ -158,6 +157,7 @@ export default function App() {
   const [msg, setMsg] = useState("I am proving I own this wallet on " + new Date().toISOString());
   const [sig, setSig] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false); // ✅ feedback copie
 
   const connected = !!provider && !!pubkey;
   const disabled = !connected || !msg.trim() || busy;
@@ -168,9 +168,9 @@ export default function App() {
 
     let p = w.detect();
 
-    // 🔁 Spécial GLOW : si non détecté de suite, on deep link + polling (comme le ZIP)
+    // 🔁 Spécial GLOW : si non détecté de suite, deep link + polling (Chrome)
     if (!p && id === "glow") {
-      p = await deepLinkAndWaitGlow(5000); // attend jusqu’à ~5s
+      p = await deepLinkAndWaitGlow(5000);
     }
 
     if (!p) {
@@ -196,16 +196,13 @@ export default function App() {
     }
   }
 
-async function disconnect() {
-  try { 
-    await provider?.disconnect?.(); 
-  } catch {}
-
-  setProvider(null);
-  setPubkey(null);
-  setSig(null); // <-- 🔑 réinitialise la signature
-}
-
+  async function disconnect() {
+    try { await provider?.disconnect?.(); } catch {}
+    setProvider(null);
+    setPubkey(null);
+    setSig(null); // ✅ efface la signature à la déconnexion
+    setCopied(false);
+  }
 
   async function sign() {
     if (!connected) {
@@ -218,6 +215,7 @@ async function disconnect() {
     }
     setBusy(true);
     setSig(null);
+    setCopied(false);
     try {
       const encoded = new TextEncoder().encode(msg);
       const res: any = await provider.signMessage(encoded, "utf8").catch(() => provider.signMessage(encoded));
@@ -228,6 +226,17 @@ async function disconnect() {
       alert("Signature cancelled or failed.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function copySignature() {
+    if (!sig) return;
+    try {
+      await navigator.clipboard.writeText(sig);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch (e) {
+      console.warn("Clipboard failed", e);
     }
   }
 
@@ -326,18 +335,41 @@ async function disconnect() {
               {sig && (
                 <div className="mt-6">
                   <label className="block text-sm font-medium text-slate-300">Signature (bs58)</label>
-                  <div className="mt-2 rounded-xl border border-slate-700/60 bg-slate-800/60 p-3 text-xs break-all">
+
+                  {/* Zone cliquable pour copier */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={copySignature}
+                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && copySignature()}
+                    title="Click to copy"
+                    className={`relative mt-2 rounded-xl border border-slate-700/60 bg-slate-800/60 p-3 text-xs break-all
+                                hover:bg-slate-800 outline-none focus:ring-4 focus:ring-brand.ring cursor-pointer transition`}
+                  >
                     {sig}
+
+                    {/* Badge Copied */}
+                    <span
+                      className={`pointer-events-none absolute -top-2 -right-2 select-none rounded-full 
+                                  bg-emerald-500 text-emerald-950 text-[10px] font-semibold px-2 py-[2px]
+                                  shadow ${copied ? 'opacity-100 scale-100' : 'opacity-0 scale-90'} transition`}
+                      aria-hidden="true"
+                    >
+                      Copied!
+                    </span>
                   </div>
+
+                  {/* Boutons optionnels (garde si tu veux) */}
                   <div className="mt-3 flex items-center gap-3">
                     <button
-                      onClick={async () => { if (sig) await navigator.clipboard.writeText(sig); }}
+                      onClick={copySignature}
                       className="inline-flex items-center gap-2 rounded-xl border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-sm hover:bg-slate-800 transition"
                       title="Copy to clipboard"
                     >
                       <span className="i-lucide-clipboard h-4 w-4" />
                       Copy
                     </button>
+
                     {pubkey && (
                       <a
                         href={`https://explorer.solana.com/address/${pubkey}`}
