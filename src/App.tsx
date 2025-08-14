@@ -370,7 +370,7 @@ export default function App() {
 
                   {/* Tip pour le click */}
                   <div className="mt-2 text-xs text-slate-400">
-                    Tip: click anywhere in the box to copy.
+                    Click anywhere in the box to copy.
                   </div>
                 </div>
               )}
