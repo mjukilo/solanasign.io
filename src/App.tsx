@@ -157,8 +157,7 @@ export default function App() {
   const [msg, setMsg] = useState("I am proving I own this wallet on " + new Date().toISOString());
   const [sig, setSig] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);     // feedback copie
-  const [expanded, setExpanded] = useState(false); // expand/collapse
+  const [copied, setCopied] = useState(false); // feedback copie
 
   const connected = !!provider && !!pubkey;
   const disabled = !connected || !msg.trim() || busy;
@@ -203,7 +202,6 @@ export default function App() {
     setPubkey(null);
     setSig(null);    // efface la signature à la déconnexion
     setCopied(false);
-    setExpanded(false);
   }
 
   async function sign() {
@@ -218,7 +216,6 @@ export default function App() {
     setBusy(true);
     setSig(null);
     setCopied(false);
-    setExpanded(false);
     try {
       const encoded = new TextEncoder().encode(msg);
       const res: any = await provider.signMessage(encoded, "utf8").catch(() => provider.signMessage(encoded));
@@ -339,71 +336,35 @@ export default function App() {
                 <div className="mt-6">
                   <label className="block text-sm font-medium text-slate-300">Signature (bs58)</label>
 
-                  {/* ===== BOX AMÉLIORÉE ===== */}
-                  <div className="mt-2 rounded-2xl p-[1px] bg-gradient-to-r from-sky-500/40 via-fuchsia-500/40 to-violet-500/40 shadow-glow">
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={copySignature}
-                      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && copySignature()}
-                      title="Click to copy"
-                      className={`group relative rounded-2xl bg-slate-900/70 border border-slate-700/60
-                                  p-3 md:p-4 font-mono text-[11.5px] md:text-xs leading-relaxed text-slate-100
-                                  hover:bg-slate-900/60 outline-none focus:ring-4 focus:ring-brand.ring
-                                  transition select-text`}
+                  {/* ==== BOX classique, cliquable pour copier ==== */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={copySignature}
+                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && copySignature()}
+                    title="Click to copy"
+                    className={`relative mt-2 rounded-xl border border-slate-700/60 bg-slate-800/60 p-3 
+                                text-xs break-all hover:bg-slate-800 outline-none 
+                                focus:ring-4 focus:ring-brand.ring cursor-pointer transition`}
+                  >
+                    {sig}
+
+                    {/* Badge Copied */}
+                    <span
+                      className={`pointer-events-none absolute -top-2 -right-2 select-none rounded-full 
+                                  bg-emerald-500 text-emerald-950 text-[10px] font-semibold px-2 py-[2px]
+                                  shadow ${copied ? 'opacity-100 scale-100' : 'opacity-0 scale-90'} transition`}
+                      aria-hidden="true"
                     >
-                      <div className={expanded ? "break-all" : "break-all line-clamp-4"}>
-                        {sig}
-                      </div>
+                      Copied!
+                    </span>
 
-                      {/* Badge Copied */}
-                      <span
-                        className={`pointer-events-none absolute -top-2 -right-2 select-none rounded-full 
-                                    bg-emerald-500 text-emerald-950 text-[10px] font-semibold px-2 py-[2px]
-                                    shadow ${copied ? 'opacity-100 scale-100' : 'opacity-0 scale-90'} transition`}
-                        aria-hidden="true"
-                      >
-                        Copied!
-                      </span>
-
-                      {/* Icône copy en overlay */}
-                      <div className="absolute right-2.5 bottom-2.5 opacity-70 group-hover:opacity-100 transition">
-                        <svg width="16" height="16" viewBox="0 0 24 24" className="text-slate-300">
-                          <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                        </svg>
-                      </div>
+                    {/* Icône copy en bas à droite */}
+                    <div className="absolute right-2.5 bottom-2.5 opacity-70 hover:opacity-100 transition" aria-hidden="true">
+                      <svg width="16" height="16" viewBox="0 0 24 24" className="text-slate-300">
+                        <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                      </svg>
                     </div>
-                  </div>
-
-                  {/* actions secondaires */}
-                  <div className="mt-3 flex flex-wrap items-center gap-3">
-                    <button
-                      onClick={copySignature}
-                      className="inline-flex items-center gap-2 rounded-xl border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-sm hover:bg-slate-800 transition"
-                      title="Copy to clipboard"
-                    >
-                      <span className="i-lucide-clipboard h-4 w-4" />
-                      Copy
-                    </button>
-
-                    <button
-                      onClick={() => setExpanded((v) => !v)}
-                      className="inline-flex items-center gap-2 rounded-xl border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-sm hover:bg-slate-800 transition"
-                      title={expanded ? "Collapse" : "Expand"}
-                    >
-                      <span className="i-lucide-arrows-up-down h-4 w-4" />
-                      {expanded ? "Collapse" : "Expand"}
-                    </button>
-
-                    {pubkey && (
-                      <a
-                        href={`https://explorer.solana.com/address/${pubkey}`}
-                        target="_blank"
-                        className="inline-flex items-center gap-2 text-sm underline decoration-dotted hover:opacity-90"
-                      >
-                        <span className="i-lucide-external-link h-4 w-4" /> View wallet on Explorer
-                      </a>
-                    )}
                   </div>
                 </div>
               )}
