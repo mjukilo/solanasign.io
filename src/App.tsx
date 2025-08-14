@@ -26,6 +26,10 @@ function toPubkeyString(pk: any): string | null {
 
 /** helpers */
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+function shortSig(s: string, head = 8, tail = 6) {
+  if (!s) return s;
+  return s.length > head + tail + 3 ? `${s.slice(0, head)}…${s.slice(-tail)}` : s;
+}
 
 /** Scan "Glow" dans window (multi-providers inclus) */
 function scanGlow(): any | null {
@@ -157,7 +161,10 @@ export default function App() {
   const [msg, setMsg] = useState("I am proving I own this wallet on " + new Date().toISOString());
   const [sig, setSig] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false); // feedback copie
+
+  // UI states signature
+  const [copied, setCopied] = useState(false);
+  const [showSigModal, setShowSigModal] = useState(false);
 
   const connected = !!provider && !!pubkey;
   const disabled = !connected || !msg.trim() || busy;
@@ -200,8 +207,9 @@ export default function App() {
     try { await provider?.disconnect?.(); } catch {}
     setProvider(null);
     setPubkey(null);
-    setSig(null);    // efface la signature à la déconnexion
+    setSig(null);        // efface la signature à la déconnexion
     setCopied(false);
+    setShowSigModal(false);
   }
 
   async function sign() {
@@ -216,6 +224,7 @@ export default function App() {
     setBusy(true);
     setSig(null);
     setCopied(false);
+    setShowSigModal(false);
     try {
       const encoded = new TextEncoder().encode(msg);
       const res: any = await provider.signMessage(encoded, "utf8").catch(() => provider.signMessage(encoded));
@@ -336,35 +345,42 @@ export default function App() {
                 <div className="mt-6">
                   <label className="block text-sm font-medium text-slate-300">Signature (bs58)</label>
 
-                  {/* ==== BOX classique, cliquable pour copier ==== */}
+                  {/* --- Pastille compacte cliquable (copie) --- */}
                   <div
                     role="button"
                     tabIndex={0}
                     onClick={copySignature}
                     onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && copySignature()}
                     title="Click to copy"
-                    className={`relative mt-2 rounded-xl border border-slate-700/60 bg-slate-800/60 p-3 
-                                text-xs break-all hover:bg-slate-800 outline-none 
-                                focus:ring-4 focus:ring-brand.ring cursor-pointer transition`}
+                    className="group mt-2 inline-flex max-w-full items-center gap-2 rounded-full border border-slate-700/70 bg-slate-800/60 px-3 py-2 text-sm text-slate-100 hover:bg-slate-800 transition cursor-pointer"
                   >
-                    {sig}
+                    <span className="truncate">{shortSig(sig)}</span>
 
-                    {/* Badge Copied */}
+                    {/* icône copy */}
+                    <span className="shrink-0 opacity-70 group-hover:opacity-100 transition" aria-hidden="true">
+                      <svg width="16" height="16" viewBox="0 0 24 24" className="text-slate-300">
+                        <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                      </svg>
+                    </span>
+
+                    {/* badge Copied */}
                     <span
-                      className={`pointer-events-none absolute -top-2 -right-2 select-none rounded-full 
-                                  bg-emerald-500 text-emerald-950 text-[10px] font-semibold px-2 py-[2px]
-                                  shadow ${copied ? 'opacity-100 scale-100' : 'opacity-0 scale-90'} transition`}
+                      className={`ml-1 select-none rounded-full bg-emerald-500 text-emerald-950 text-[10px] font-semibold px-2 py-[2px] shadow 
+                                  ${copied ? "opacity-100 scale-100" : "opacity-0 scale-90"} transition`}
                       aria-hidden="true"
                     >
                       Copied!
                     </span>
+                  </div>
 
-                    {/* Icône copy en bas à droite */}
-                    <div className="absolute right-2.5 bottom-2.5 opacity-70 hover:opacity-100 transition" aria-hidden="true">
-                      <svg width="16" height="16" viewBox="0 0 24 24" className="text-slate-300">
-                        <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                      </svg>
-                    </div>
+                  {/* Lien pour afficher la signature complète */}
+                  <div className="mt-2 text-xs">
+                    <button
+                      onClick={() => setShowSigModal(true)}
+                      className="underline decoration-dotted text-slate-400 hover:text-slate-200 transition"
+                    >
+                      View full signature
+                    </button>
                   </div>
                 </div>
               )}
@@ -390,7 +406,7 @@ export default function App() {
         </div>
       </footer>
 
-      {/* MODAL PICKER */}
+      {/* MODAL PICKER (wallets) */}
       {pickerOpen && (
         <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" onClick={() => setPickerOpen(false)}>
           <div className="absolute inset-0 bg-black/60" />
@@ -416,6 +432,59 @@ export default function App() {
             </div>
             <div className="px-5 pb-4 pt-2 text-xs text-slate-400">
               Mobile tip: open this page inside your wallet’s in-app browser.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Full signature */}
+      {showSigModal && sig && (
+        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" onClick={() => setShowSigModal(false)}>
+          <div className="absolute inset-0 bg-black/60" />
+          <div
+            className="relative mx-auto mt-24 w-[92%] max-w-2xl rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 px-5 py-3">
+              <div className="text-sm font-semibold">Full signature</div>
+              <button
+                onClick={() => setShowSigModal(false)}
+                className="rounded-lg border border-slate-700/60 px-2.5 py-1 text-xs hover:bg-slate-800 transition"
+              >
+                Close
+              </button>
+            </div>
+
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={copySignature}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && copySignature()}
+              title="Click to copy"
+              className="relative m-4 rounded-xl border border-slate-700/60 bg-slate-800/60 p-4 font-mono text-xs leading-relaxed break-all hover:bg-slate-800 outline-none focus:ring-4 focus:ring-brand.ring cursor-pointer transition"
+            >
+              {sig}
+
+              {/* icône copy en bas à droite */}
+              <div className="absolute right-3 bottom-3 opacity-70 hover:opacity-100 transition" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 24 24" className="text-slate-300">
+                  <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                </svg>
+              </div>
+
+              {/* badge Copied */}
+              <span
+                className={`pointer-events-none absolute -top-2 -right-2 select-none rounded-full 
+                            bg-emerald-500 text-emerald-950 text-[10px] font-semibold px-2 py-[2px]
+                            shadow ${copied ? 'opacity-100 scale-100' : 'opacity-0 scale-90'} transition`}
+                aria-hidden="true"
+              >
+                Copied!
+              </span>
+            </div>
+
+            <div className="m-4 -mt-2 mb-5 text-[11px] text-slate-400">
+              Tip: click anywhere in the box to copy.
             </div>
           </div>
         </div>
