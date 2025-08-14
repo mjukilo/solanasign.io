@@ -160,8 +160,7 @@ export default function App() {
 
   // UI states signature / modal
   const [copied, setCopied] = useState(false);
-  const [showSigModal, setShowSigModal] = useState(false);
-  const [modalMode, setModalMode] = useState<"signature" | "usecases">("signature");
+  const [showUseCasesModal, setShowUseCasesModal] = useState(false);
 
   const connected = !!provider && !!pubkey;
   const disabled = !connected || !msg.trim() || busy;
@@ -204,7 +203,6 @@ export default function App() {
     setPubkey(null);
     setSig(null);
     setCopied(false);
-    // on ne ferme pas forcément le modal ici
   }
 
   async function sign() {
@@ -370,14 +368,9 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Lien pour modal "Full signature" */}
-                  <div className="mt-2 text-xs">
-                    <button
-                      onClick={() => { setModalMode("signature"); setShowSigModal(true); }}
-                      className="underline decoration-dotted text-slate-400 hover:text-slate-200 transition"
-                    >
-                      View full signature
-                    </button>
+                  {/* Tip pour le click */}
+                  <div className="mt-2 text-xs text-slate-400">
+                    Tip: click anywhere in the box to copy.
                   </div>
                 </div>
               )}
@@ -393,9 +386,9 @@ export default function App() {
           <div className="flex items-center gap-4">
             <a className="hover:text-slate-200" href="https://github.com/mjukilo/solanasign.io">GitHub</a>
 
-            {/* 👇 Lien "Use cases" qui ouvre le MÊME modal */}
+            {/* Lien "Use cases" qui ouvre le modal */}
             <button
-              onClick={() => { setModalMode("usecases"); setShowSigModal(true); }}
+              onClick={() => setShowUseCasesModal(true)}
               className="hover:text-slate-200 underline decoration-dotted"
               title="Open use cases"
             >
@@ -438,82 +431,42 @@ export default function App() {
               ))}
             </div>
             <div className="px-5 pb-4 pt-2 text-xs text-slate-400">
-              Mobile tip: open this page inside your wallet’s in-app browser.
+              Mobile tip: open this page inside your wallet's in-app browser.
             </div>
           </div>
         </div>
       )}
 
-      {/* MÊME MODAL réutilisé pour "Full signature" ET "Use cases" */}
-      {showSigModal && (
-        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" onClick={() => setShowSigModal(false)}>
+      {/* MODAL "Use cases" */}
+      {showUseCasesModal && (
+        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" onClick={() => setShowUseCasesModal(false)}>
           <div className="absolute inset-0 bg-black/60" />
           <div
             className="relative mx-auto mt-24 w-[92%] max-w-2xl rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-800 px-5 py-3">
-              <div className="text-sm font-semibold">
-                {modalMode === "signature" ? "Full signature" : "Use cases"}
-              </div>
+              <div className="text-sm font-semibold">Use cases</div>
               <button
-                onClick={() => setShowSigModal(false)}
+                onClick={() => setShowUseCasesModal(false)}
                 className="rounded-lg border border-slate-700/60 px-2.5 py-1 text-xs hover:bg-slate-800 transition"
               >
                 Close
               </button>
             </div>
 
-            {modalMode === "signature" ? (
-              // ---- Contenu "Full signature"
-              sig ? (
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={copySignature}
-                  onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && copySignature()}
-                  title="Click to copy"
-                  className="relative m-4 rounded-xl border border-slate-700/60 bg-slate-800/60 p-4 font-mono text-xs leading-relaxed break-all hover:bg-slate-800 outline-none focus:ring-4 focus:ring-brand.ring cursor-pointer transition"
-                >
-                  {sig}
-
-                  {/* icône copy en bas à droite */}
-                  <div className="absolute right-3 bottom-3 opacity-70 hover:opacity-100 transition" aria-hidden="true">
-                    <svg width="16" height="16" viewBox="0 0 24 24" className="text-slate-300">
-                      <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                    </svg>
-                  </div>
-
-                  {/* badge Copied */}
-                  <span
-                    className={`pointer-events-none absolute -top-2 -right-2 select-none rounded-full 
-                                bg-emerald-500 text-emerald-950 text-[10px] font-semibold px-2 py-[2px]
-                                shadow ${copied ? 'opacity-100 scale-100' : 'opacity-0 scale-90'} transition`}
-                    aria-hidden="true"
-                  >
-                    Copied!
-                  </span>
-                </div>
-              ) : (
-                <div className="m-4 text-sm text-slate-300">
-                  No signature yet. Sign a message to view it here.
-                </div>
-              )
-            ) : (
-              // ---- Contenu "Use cases"
-              <div className="m-4 text-sm text-slate-300 space-y-3">
-                <p className="text-slate-200 font-medium">Common use cases</p>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>Prove ownership of a wallet (KYC-less login, support, community gates)</li>
-                  <li>Bind a wallet to a user account (account linking)</li>
-                  <li>Anti-fraud: sign challenges containing timestamp + domain (replay protection)</li>
-                  <li>Off-chain authorization for premium features or allow-lists</li>
-                </ul>
-                <p className="text-slate-400 text-xs">
-                  Tip: always verify the signature over the exact same message bytes (UTF-8) and decode signature from base58.
-                </p>
-              </div>
-            )}
+            <div className="m-4 text-sm text-slate-300 space-y-3">
+              <p className="text-slate-200 font-medium">Common use cases</p>
+              <ul className="list-disc pl-5 space-y-1">
+                <li>Prove ownership of a wallet (KYC-less login, support, community gates)</li>
+                <li>Bind a wallet to a user account (account linking)</li>
+                <li>Anti-fraud: sign challenges containing timestamp + domain (replay protection)</li>
+                <li>Off-chain authorization for premium features or allow-lists</li>
+              </ul>
+              <p className="text-slate-400 text-xs">
+                Tip: always verify the signature over the exact same message bytes (UTF-8) and decode signature from base58.
+              </p>
+            </div>
           </div>
         </div>
       )}
