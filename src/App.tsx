@@ -1,13 +1,14 @@
 import { useState } from "react";
 import bs58 from "bs58";
 
-// 🖼️ Icônes locales
+// Icon
 import phantomIcon from "./assets/phantom.svg";
 import solflareIcon from "./assets/solflare.svg";
 import glowIcon from "./assets/glow.svg";
 import exodusIcon from "./assets/exodus.svg";
 import backpackIcon from "./assets/backpack.svg";
 import solanasignLogo from "./assets/solanasign-logo.png";
+import trustwalletIcon from "./assets/trustlogo.svg";
 
 type WalletId = "phantom" | "solflare" | "glow" | "exodus" | "backpack";
 
@@ -94,7 +95,7 @@ async function connectWithCompat(p: any) {
 }
 
 const WALLETS: {
-  id: WalletId;
+  id: WalletId | "trustwallet";
   label: string;
   icon: string;
   detect: () => any | null;
@@ -112,7 +113,11 @@ const WALLETS: {
       if (p2?.isPhantom) return p2;
       return null;
     },
-    install: () => window.open(isMobile ? "https://phantom.app/" : "https://phantom.app/download", "_blank"),
+    install: () =>
+      window.open(
+        isMobile ? "https://phantom.app/" : "https://phantom.app/download",
+        "_blank"
+      ),
     subtitle: "Extension / Mobile app",
   },
   {
@@ -120,7 +125,11 @@ const WALLETS: {
     label: "Solflare",
     icon: solflareIcon,
     detect: () => (window as any).solflare ?? null,
-    install: () => window.open(isMobile ? "https://solflare.com/" : "https://solflare.com/download", "_blank"),
+    install: () =>
+      window.open(
+        isMobile ? "https://solflare.com/" : "https://solflare.com/download",
+        "_blank"
+      ),
     subtitle: "Extension / Mobile app",
   },
   {
@@ -133,6 +142,18 @@ const WALLETS: {
     },
     install: () => window.open("https://backpack.app/download", "_blank"),
     subtitle: "Extension / Mobile app",
+  },
+  {
+    id: "trustwallet",
+    label: "Trust Wallet",
+    icon: trustwalletIcon,
+    detect: () => {
+      const w = window as any;
+      return w.trustwallet ?? null;
+    },
+    install: () =>
+      window.open("https://trustwallet.com/browser-extension", "_blank"),
+    subtitle: "Extension only",
   },
   {
     id: "glow",
