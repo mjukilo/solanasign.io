@@ -54,6 +54,46 @@ function scanGlow(): any | null {
   return null;
 }
 
+/** ✅ Scan Trust Wallet (gère plusieurs variantes d'injection) */
+function scanTrustWallet(): any | null {
+  const w = window as any;
+
+  // Injections directes possibles
+  if (w.trustwallet?.solana) return w.trustwallet.solana;
+  if (w.trustwallet) return w.trustwallet;
+  if (w.trustWallet?.solana) return w.trustWallet.solana;
+  if (w.trustWallet) return w.trustWallet;
+
+  // Multi-providers (ex: window.solana.providers)
+  const sol = w.solana;
+  const providers: any[] = Array.isArray(sol?.providers) ? sol.providers : [];
+  if (providers.length) {
+    const byFlag = providers.find((p) => p?.isTrust || p?.isTrustWallet);
+    if (byFlag) return byFlag;
+    const byName = providers.find(
+      (p) =>
+        p?.name === "Trust Wallet" ||
+        p?.wallet === "Trust Wallet" ||
+        p?.provider === "Trust Wallet" ||
+        p?.name === "Trust"
+    );
+    if (byName) return byName;
+  }
+
+  // Provider unique
+  if (sol?.isTrust || sol?.isTrustWallet) return sol;
+  if (
+    sol &&
+    (sol.name === "Trust Wallet" ||
+      sol.wallet === "Trust Wallet" ||
+      sol.provider === "Trust Wallet" ||
+      sol.name === "Trust")
+  )
+    return sol;
+
+  return null;
+}
+
 /** Deep link + polling: comme dans le ZIP */
 async function deepLinkAndWaitGlow(timeoutMs = 5000): Promise<any | null> {
   try {
@@ -143,10 +183,7 @@ const WALLETS: {
     id: "trustwallet",
     label: "Trust Wallet",
     icon: trustwalletIcon,
-    detect: () => {
-      const w = window as any;
-      return w.trustwallet ?? null;
-    },
+    detect: () => scanTrustWallet(),
     install: () =>
       window.open("https://trustwallet.com/browser-extension", "_blank"),
     subtitle: "Extension only",
