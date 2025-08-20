@@ -99,6 +99,7 @@ const WALLETS: {
   icon: string;
   detect: () => any | null;
   install: () => void;
+  subtitle: string;
 }[] = [
   {
     id: "phantom",
@@ -112,6 +113,7 @@ const WALLETS: {
       return null;
     },
     install: () => window.open(isMobile ? "https://phantom.app/" : "https://phantom.app/download", "_blank"),
+    subtitle: "Extension / Mobile app",
   },
   {
     id: "solflare",
@@ -119,6 +121,18 @@ const WALLETS: {
     icon: solflareIcon,
     detect: () => (window as any).solflare ?? null,
     install: () => window.open(isMobile ? "https://solflare.com/" : "https://solflare.com/download", "_blank"),
+    subtitle: "Extension / Mobile app",
+  },
+  {
+    id: "backpack",
+    label: "Backpack",
+    icon: backpackIcon,
+    detect: () => {
+      const w = window as any;
+      return w.backpack?.solana || (w.solana?.isBackpack ? w.solana : null);
+    },
+    install: () => window.open("https://backpack.app/download", "_blank"),
+    subtitle: "Extension / Mobile app",
   },
   {
     id: "glow",
@@ -126,6 +140,7 @@ const WALLETS: {
     icon: glowIcon,
     detect: () => scanGlow(),
     install: () => window.open("https://glow.app/download", "_blank"),
+    subtitle: "Extension only",
   },
   {
     id: "exodus",
@@ -137,16 +152,7 @@ const WALLETS: {
       return p && (p.isExodus || p?.provider === "Exodus") ? p : null;
     },
     install: () => window.open("https://www.exodus.com/download/", "_blank"),
-  },
-  {
-    id: "backpack",
-    label: "Backpack",
-    icon: backpackIcon,
-    detect: () => {
-      const w = window as any;
-      return w.backpack?.solana || (w.solana?.isBackpack ? w.solana : null);
-    },
-    install: () => window.open("https://backpack.app/download", "_blank"),
+    subtitle: "Extension only",
   },
 ];
 
@@ -422,7 +428,7 @@ export default function App() {
                   <img src={w.icon} alt={w.label} className="h-7 w-7 rounded-md object-contain" />
                   <div>
                     <div className="text-sm font-medium">{w.label}</div>
-                    <div className="text-xs text-slate-400">Extension / Mobile app</div>
+                    <div className="text-xs text-slate-400">{w.subtitle}</div>
                   </div>
                 </button>
               ))}
