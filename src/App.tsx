@@ -10,7 +10,7 @@ import backpackIcon from "./assets/backpack.svg";
 import solanasignLogo from "./assets/solanasign-logo.png";
 import trustwalletIcon from "./assets/trustlogo.svg";
 
-type WalletId = "phantom" | "solflare" | "glow" | "exodus" | "backpack";
+type WalletId = "phantom" | "solflare" | "glow" | "exodus" | "backpack" | "trust";
 
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
@@ -58,7 +58,7 @@ function scanGlow(): any | null {
   return null;
 }
 
-/** Deep link + polling: comme dans le ZIP */
+/** Deep link + polling: comme dans le ZIP pour Glow */
 async function deepLinkAndWaitGlow(timeoutMs = 5000): Promise<any | null> {
   try {
     let p = scanGlow();
@@ -78,24 +78,58 @@ async function deepLinkAndWaitGlow(timeoutMs = 5000): Promise<any | null> {
   }
 }
 
-/** compat de connexion: avec/sans options, puis request() */
+/** Détection robuste de Trust Wallet */
+function detectTrust(): any | null {
+  const w = window as any;
+
+  // Injection officielle
+  if (w.trustwallet?.solana) return w.trustwallet.solana;
+
+  // Multi-providers
+  const root = w.solana;
+  const list: any[] = Array.isArray(root?.providers) ? root.providers : [];
+  if (list.length) {
+    const byFlag = list.find((p) => p?.isTrust || p?.isTrustWallet);
+    if (byFlag) return byFlag;
+    const byName = list.find(
+      (p) =>
+        p?.name === "Trust Wallet" ||
+        p?.provider === "Trust Wallet" ||
+        p?.wallet === "Trust Wallet"
+    );
+    if (byName) return byName;
+  }
+
+  // Flags posés directement
+  if (root?.isTrust || root?.isTrustWallet) return root;
+
+  return null;
+}
+
+/** compat de connexion: avec/sans options, puis request() (+ fallback Trust) */
 async function connectWithCompat(p: any) {
   try {
     const r = await p.connect?.({ onlyIfTrusted: false });
     return r;
-  } catch {
-    try {
-      const r2 = await p.connect?.();
-      return r2;
-    } catch {
-      const r3 = await p.request?.({ method: "connect" });
-      return r3;
-    }
-  }
+  } catch {}
+  try {
+    const r2 = await p.connect?.();
+    return r2;
+  } catch {}
+  try {
+    const r3 = await p.request?.({ method: "connect" });
+    return r3;
+  } catch {}
+  // Certaines versions Trust utilisent un autre nom de méthode
+  try {
+    const r4 = await p.request?.({ method: "solana_connect" });
+    return r4;
+  } catch {}
+  throw new Error("connect failed");
 }
 
 const WALLETS: {
-  id: WalletId | "trustwallet";
+  id: WalletId;
   label: string;
   icon: string;
   detect: () => any | null;
@@ -144,13 +178,10 @@ const WALLETS: {
     subtitle: "Extension / Mobile app",
   },
   {
-    id: "trustwallet",
+    id: "trust",
     label: "Trust Wallet",
     icon: trustwalletIcon,
-    detect: () => {
-      const w = window as any;
-      return w.trustwallet ?? null;
-    },
+    detect: () => detectTrust(),
     install: () =>
       window.open("https://trustwallet.com/browser-extension", "_blank"),
     subtitle: "Extension only",
