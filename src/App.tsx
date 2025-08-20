@@ -1,19 +1,20 @@
 import { useState } from "react";
 import bs58 from "bs58";
 
-// Icons
+// Icon
 import phantomIcon from "./assets/phantom.svg";
 import solflareIcon from "./assets/solflare.svg";
 import glowIcon from "./assets/glow.svg";
 import exodusIcon from "./assets/exodus.svg";
 import backpackIcon from "./assets/backpack.svg";
-import trustwalletIcon from "./assets/trustlogo.svg";
 import solanasignLogo from "./assets/solanasign-logo.png";
+import trustwalletIcon from "./assets/trustlogo.svg";
 
-type WalletId = "phantom" | "solflare" | "glow" | "exodus" | "backpack" | "trustwallet";
+type WalletId = "phantom" | "solflare" | "glow" | "exodus" | "backpack";
 
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
+/** helper: conversion fiable de la pubkey en string */
 function toPubkeyString(pk: any): string | null {
   if (!pk) return null;
   try {
@@ -25,9 +26,10 @@ function toPubkeyString(pk: any): string | null {
   }
 }
 
+/** helpers */
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/* ---------- Glow detection (multi-provider friendly) ---------- */
+/** Scan "Glow" dans window (multi-providers inclus) */
 function scanGlow(): any | null {
   const w = window as any;
   if (w.glow?.solana) return w.glow.solana;
@@ -52,45 +54,7 @@ function scanGlow(): any | null {
   return null;
 }
 
-/* ---------- Trust Wallet detection (robuste) ---------- */
-function scanTrustWallet(): any | null {
-  const w = window as any;
-
-  // 1) Injection directe côté extension
-  // (certaines versions exposent .solana, d’autres le provider direct)
-  if (w.trustwallet?.solana) return w.trustwallet.solana;
-  if (w.trustwallet) return w.trustwallet;
-  if (w.trustWallet?.solana) return w.trustWallet.solana;
-  if (w.trustWallet) return w.trustWallet;
-
-  // 2) Via multi-providers
-  const sol = w.solana;
-  const providers: any[] = Array.isArray(sol?.providers) ? sol.providers : [];
-  if (providers.length) {
-    const byFlag = providers.find((p) => p?.isTrust || p?.isTrustWallet);
-    if (byFlag) return byFlag;
-    const byName = providers.find(
-      (p) =>
-        p?.name === "Trust Wallet" ||
-        p?.wallet === "Trust Wallet" ||
-        p?.provider === "Trust Wallet" ||
-        p?.name === "Trust"
-    );
-    if (byName) return byName;
-  }
-
-  // 3) Provider unique dans window.solana
-  if (sol?.isTrust || sol?.isTrustWallet) return sol;
-  if (
-    sol &&
-    (sol.name === "Trust Wallet" || sol.wallet === "Trust Wallet" || sol.provider === "Trust Wallet" || sol.name === "Trust")
-  )
-    return sol;
-
-  return null;
-}
-
-/* ---------- Deep link + polling pour Glow (comme dans le ZIP) ---------- */
+/** Deep link + polling: comme dans le ZIP */
 async function deepLinkAndWaitGlow(timeoutMs = 5000): Promise<any | null> {
   try {
     let p = scanGlow();
@@ -110,7 +74,7 @@ async function deepLinkAndWaitGlow(timeoutMs = 5000): Promise<any | null> {
   }
 }
 
-/* ---------- Connexion compatible (avec/sans options, puis request) ---------- */
+/** compat de connexion: avec/sans options, puis request() */
 async function connectWithCompat(p: any) {
   try {
     const r = await p.connect?.({ onlyIfTrusted: false });
@@ -126,9 +90,8 @@ async function connectWithCompat(p: any) {
   }
 }
 
-/* ---------- Liste wallets ---------- */
 const WALLETS: {
-  id: WalletId;
+  id: WalletId | "trustwallet";
   label: string;
   icon: string;
   detect: () => any | null;
@@ -180,7 +143,10 @@ const WALLETS: {
     id: "trustwallet",
     label: "Trust Wallet",
     icon: trustwalletIcon,
-    detect: () => scanTrustWallet(),
+    detect: () => {
+      const w = window as any;
+      return w.trustwallet ?? null;
+    },
     install: () =>
       window.open("https://trustwallet.com/browser-extension", "_blank"),
     subtitle: "Extension only",
@@ -216,19 +182,18 @@ export default function App() {
   const [sig, setSig] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // UI states signature / modal
   const [copied, setCopied] = useState(false);
   const [showUseCasesModal, setShowUseCasesModal] = useState(false);
 
   const connected = !!provider && !!pubkey;
   const disabled = !connected || !msg.trim() || busy;
 
-  async function pickWallet(id: WalletId) {
+  async function pickWallet(id: WalletId | "trustwallet") {
     setPickerOpen(false);
     const w = WALLETS.find((x) => x.id === id)!;
 
     let p = w.detect();
-
-    // Deep link + polling pour Glow (desktop/mobile)
     if (!p && id === "glow") {
       p = await deepLinkAndWaitGlow(5000);
     }
@@ -302,10 +267,10 @@ export default function App() {
 
   return (
     <div className="min-h-screen relative overflow-hidden">
-      {/* BACKGROUND de page (léger fond global) */}
+      {/* BACKGROUND */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute inset-0 bg-grid bg-[length:22px_22px]" />
-        <div className="absolute inset-0 bg-[radial-gradient(70rem_60rem_at_90%_0%,rgba(14,165,233,.18),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(70rem_60rem_at_90%_0%,rgba(14,165,233,.22),transparent_60%)]" />
       </div>
 
       {/* HEADER */}
@@ -323,17 +288,7 @@ export default function App() {
             </div>
           </a>
 
-          {/* Wrapper RELATIF pour ancrer le halo au bouton */}
-          <div className="relative flex items-center gap-3">
-            {/* Halo collé au bouton (ne bouge plus avec la largeur d'écran) */}
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 -z-10"
-            >
-              <span className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-6 md:translate-x-4 w-[28rem] h-[28rem] rounded-full opacity-80
-                               bg-[radial-gradient(14rem_14rem_at_center,rgba(14,165,233,.28),transparent_60%)]" />
-            </span>
-
+          <div className="flex items-center gap-3">
             {connected && (
               <span className="text-xs rounded-full bg-emerald-400/10 border border-emerald-400/30 px-3 py-1 text-emerald-300">
                 {pubkey?.slice(0,4)}…{pubkey?.slice(-4)}
@@ -342,17 +297,14 @@ export default function App() {
             {!connected ? (
               <button
                 onClick={() => setPickerOpen(true)}
-                className="relative rounded-xl px-4 py-2 text-sm font-medium bg-sky-500 text-sky-950 hover:bg-sky-400 transition shadow-glow"
+                className="rounded-xl px-4 py-2 text-sm font-medium bg-sky-500 text-sky-950 hover:bg-sky-400 transition shadow-glow"
               >
                 Connect wallet
               </button>
             ) : (
               <button
                 onClick={disconnect}
-                className="relative rounded-xl px-4 py-2 text-sm font-medium
-                           bg-gradient-to-r from-sky-600 to-sky-500
-                           text-white hover:from-sky-500 hover:to-sky-400
-                           transition shadow-glow"
+                className="rounded-xl px-4 py-2 text-sm font-medium bg-slate-700 text-slate-200 hover:bg-slate-600 transition"
               >
                 Disconnect
               </button>
@@ -365,12 +317,13 @@ export default function App() {
       <main className="relative z-10">
         <section className="mx-auto max-w-6xl px-4 py-10 md:py-16">
           <div className="grid md:grid-cols-2 gap-8 items-stretch">
+            {/* Texte à gauche */}
             <div className="flex flex-col justify-center">
               <h1 className="text-3xl md:text-5xl font-semibold tracking-tight">
                 Prove wallet ownership<br/><span className="text-sky-400">by signing a message</span>.
               </h1>
               <p className="mt-4 text-slate-300/90 leading-relaxed">
-                Works with Phantom, Solflare, Backpack, Glow, Exodus and more.
+                Works with Phantom, Solflare, Backpack, Glow, Exodus, TrustWallet and more.
                 No passwords, no email—just cryptographic proof.
               </p>
               <ul className="mt-6 space-y-2 text-slate-300/80 text-sm">
@@ -386,7 +339,7 @@ export default function App() {
               </ul>
             </div>
 
-            {/* Card */}
+            {/* Carte de signature */}
             <div className="rounded-2xl border border-slate-700/60 bg-slate-900/50 backdrop-blur p-6 md:p-8 shadow-glow">
               <label className="block text-sm font-medium text-slate-300">Message to sign</label>
               <textarea
@@ -412,6 +365,7 @@ export default function App() {
                 <div className="mt-6">
                   <label className="block text-sm font-medium text-slate-300">Signature (bs58)</label>
 
+                  {/* ==== FULL-WIDTH clickable box (même largeur que textarea) ==== */}
                   <div
                     role="button"
                     tabIndex={0}
@@ -424,6 +378,7 @@ export default function App() {
                   >
                     {sig}
 
+                    {/* Badge Copied */}
                     <span
                       className={`pointer-events-none absolute -top-2 -right-2 select-none rounded-full 
                                   bg-emerald-500 text-emerald-950 text-[10px] font-semibold px-2 py-[2px]
@@ -433,6 +388,7 @@ export default function App() {
                       Copied!
                     </span>
 
+                    {/* Icône copy en bas à droite */}
                     <div className="absolute right-2.5 bottom-2.5 opacity-70 hover:opacity-100 transition" aria-hidden="true">
                       <svg width="16" height="16" viewBox="0 0 24 24" className="text-slate-300">
                         <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
@@ -440,6 +396,7 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* Tip pour le click */}
                   <div className="mt-2 text-xs text-slate-400">
                     Click anywhere in the box to copy.
                   </div>
@@ -458,11 +415,13 @@ export default function App() {
             <a
               className="hover:text-slate-200"
               href="https://github.com/mjukilo/solanasign.io"
+              target="_blank"
               rel="nofollow noopener noreferrer"
             >
               GitHub
             </a>
-            {/* Use cases caché (préservé pour plus tard) */}
+
+            {/* Lien "Use cases" caché pour le futur */}
             <button
               onClick={() => setShowUseCasesModal(true)}
               className="hidden hover:text-slate-200 underline decoration-dotted"
@@ -474,7 +433,7 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Wallet picker */}
+      {/* MODAL PICKER (wallets) */}
       {pickerOpen && (
         <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" onClick={() => setPickerOpen(false)}>
           <div className="absolute inset-0 bg-black/60" />
@@ -482,30 +441,30 @@ export default function App() {
             className="relative mx-auto mt-24 w-[92%] max-w-md rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="border-b border-slate-800 px-5 py-4 text-sm font-semibold">Choose a wallet</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3">
+            <div className="border-b border-slate-800 px-5 py-4 text-sm font-semibold">Select a wallet</div>
+            <ul className="divide-y divide-slate-800">
               {WALLETS.map((w) => (
-                <button
+                <li
                   key={w.id}
+                  className="flex items-center justify-between px-5 py-3 hover:bg-slate-800/50 cursor-pointer transition"
                   onClick={() => pickWallet(w.id)}
-                  className="flex items-center gap-3 rounded-xl border border-slate-700/70 bg-slate-800/50 px-3 py-3 text-left hover:bg-slate-800 transition"
                 >
-                  <img src={w.icon} alt={w.label} className="h-7 w-7 rounded-md object-contain" />
-                  <div>
-                    <div className="text-sm font-medium">{w.label}</div>
-                    <div className="text-xs text-slate-400">{w.subtitle}</div>
+                  <div className="flex items-center gap-3">
+                    <img src={w.icon} alt={w.label} className="h-6 w-6" />
+                    <div>
+                      <p className="font-medium">{w.label}</p>
+                      <p className="text-xs text-slate-400">{w.subtitle}</p>
+                    </div>
                   </div>
-                </button>
+                  <span className="text-xs text-sky-400">Connect</span>
+                </li>
               ))}
-            </div>
-            <div className="px-5 pb-4 pt-2 text-xs text-slate-400">
-              Mobile tip: open this page inside your wallet's in-app browser.
-            </div>
+            </ul>
           </div>
         </div>
       )}
 
-      {/* Use cases modal (resté dispo mais lien caché) */}
+      {/* MODAL "USE CASES" (hidden trigger) */}
       {showUseCasesModal && (
         <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" onClick={() => setShowUseCasesModal(false)}>
           <div className="absolute inset-0 bg-black/60" />
@@ -522,17 +481,16 @@ export default function App() {
                 Close
               </button>
             </div>
-
             <div className="m-4 text-sm text-slate-300 space-y-3">
               <p className="text-slate-200 font-medium">Common use cases</p>
               <ul className="list-disc pl-5 space-y-1">
-                <li>Prove ownership of a wallet (KYC-less login, support, community gates)</li>
-                <li>Bind a wallet to a user account (account linking)</li>
-                <li>Anti-fraud: sign challenges containing timestamp + domain (replay protection)</li>
-                <li>Off-chain authorization for premium features or allow-lists</li>
+                <li>Prove ownership of a wallet</li>
+                <li>Bind a wallet to a user account</li>
+                <li>Anti-fraud challenges with timestamp + domain</li>
+                <li>Off-chain authorization (premium features / allow-lists)</li>
               </ul>
               <p className="text-slate-400 text-xs">
-                Tip: always verify the signature over the exact same message bytes (UTF-8) and decode signature from base58.
+                Tip: always verify signature over the same message bytes (UTF-8) and decode from base58.
               </p>
             </div>
           </div>
