@@ -251,19 +251,19 @@ export default function App() {
       </div>
 
       {/* HEADER */}
-<header className="relative z-10">
-  <div className="mx-auto max-w-6xl px-4 py-4 md:py-6 flex items-center justify-between gap-3">
-    <a href="/" className="flex items-center gap-3">
-      <img
-        src={solanasignLogo}
-        alt="SolanaSign"
-        className="h-9 w-9 rounded-xl ring-1 ring-sky-400/30"
-      />
-      <div>
-        <p className="text-lg font-semibold tracking-tight">SolanaSign</p>
-        <p className="text-xs text-slate-400 -mt-1">Sign a message • Prove ownership</p>
-      </div>
-    </a>
+      <header className="relative z-10">
+        <div className="mx-auto max-w-6xl px-4 py-4 md:py-6 flex items-center justify-between gap-3">
+          <a href="/" className="flex items-center gap-3">
+            <img
+              src={solanasignLogo}
+              alt="SolanaSign"
+              className="h-[4.8rem] w-[4.8rem] rounded-xl"
+            />
+            <div>
+              <p className="text-lg font-semibold tracking-tight">SolanaSign</p>
+              <p className="text-xs text-slate-400 -mt-1">Sign a message • Prove ownership</p>
+            </div>
+          </a>
 
           <div className="flex items-center gap-3">
             {connected && (
@@ -398,14 +398,6 @@ export default function App() {
               title="Open use cases"
             >
               Use cases
-            </button>
-
-            <button
-              onClick={()=>document.documentElement.classList.toggle('dark')}
-              className="rounded-xl border border-slate-700/60 px-3 py-1"
-              title="Toggle dark mode"
-            >
-              Toggle theme
             </button>
           </div>
         </div>
