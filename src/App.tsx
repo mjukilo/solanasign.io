@@ -10,7 +10,7 @@ import backpackIcon from "./assets/backpack.svg";
 import solanasignLogo from "./assets/solanasign-logo.png";
 import trustwalletIcon from "./assets/trustlogo.svg";
 
-type WalletId = "phantom" | "solflare" | "glow" | "exodus" | "backpack" | "trust";
+type WalletId = "phantom" | "solflare" | "glow" | "exodus" | "backpack";
 
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
@@ -28,10 +28,6 @@ function toPubkeyString(pk: any): string | null {
 
 /** helpers */
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
-function shortSig(s: string, head = 8, tail = 6) {
-  if (!s) return s;
-  return s.length > head + tail + 3 ? `${s.slice(0, head)}…${s.slice(-tail)}` : s;
-}
 
 /** Scan "Glow" dans window (multi-providers inclus) */
 function scanGlow(): any | null {
@@ -58,7 +54,7 @@ function scanGlow(): any | null {
   return null;
 }
 
-/** Deep link + polling: comme dans le ZIP pour Glow */
+/** Deep link + polling: comme dans le ZIP */
 async function deepLinkAndWaitGlow(timeoutMs = 5000): Promise<any | null> {
   try {
     let p = scanGlow();
@@ -78,58 +74,24 @@ async function deepLinkAndWaitGlow(timeoutMs = 5000): Promise<any | null> {
   }
 }
 
-/** Détection robuste de Trust Wallet */
-function detectTrust(): any | null {
-  const w = window as any;
-
-  // Injection officielle
-  if (w.trustwallet?.solana) return w.trustwallet.solana;
-
-  // Multi-providers
-  const root = w.solana;
-  const list: any[] = Array.isArray(root?.providers) ? root.providers : [];
-  if (list.length) {
-    const byFlag = list.find((p) => p?.isTrust || p?.isTrustWallet);
-    if (byFlag) return byFlag;
-    const byName = list.find(
-      (p) =>
-        p?.name === "Trust Wallet" ||
-        p?.provider === "Trust Wallet" ||
-        p?.wallet === "Trust Wallet"
-    );
-    if (byName) return byName;
-  }
-
-  // Flags posés directement
-  if (root?.isTrust || root?.isTrustWallet) return root;
-
-  return null;
-}
-
-/** compat de connexion: avec/sans options, puis request() (+ fallback Trust) */
+/** compat de connexion: avec/sans options, puis request() */
 async function connectWithCompat(p: any) {
   try {
     const r = await p.connect?.({ onlyIfTrusted: false });
     return r;
-  } catch {}
-  try {
-    const r2 = await p.connect?.();
-    return r2;
-  } catch {}
-  try {
-    const r3 = await p.request?.({ method: "connect" });
-    return r3;
-  } catch {}
-  // Certaines versions Trust utilisent un autre nom de méthode
-  try {
-    const r4 = await p.request?.({ method: "solana_connect" });
-    return r4;
-  } catch {}
-  throw new Error("connect failed");
+  } catch {
+    try {
+      const r2 = await p.connect?.();
+      return r2;
+    } catch {
+      const r3 = await p.request?.({ method: "connect" });
+      return r3;
+    }
+  }
 }
 
 const WALLETS: {
-  id: WalletId;
+  id: WalletId | "trustwallet";
   label: string;
   icon: string;
   detect: () => any | null;
@@ -178,10 +140,13 @@ const WALLETS: {
     subtitle: "Extension / Mobile app",
   },
   {
-    id: "trust",
+    id: "trustwallet",
     label: "Trust Wallet",
     icon: trustwalletIcon,
-    detect: () => detectTrust(),
+    detect: () => {
+      const w = window as any;
+      return w.trustwallet ?? null;
+    },
     install: () =>
       window.open("https://trustwallet.com/browser-extension", "_blank"),
     subtitle: "Extension only",
@@ -224,7 +189,7 @@ export default function App() {
   const connected = !!provider && !!pubkey;
   const disabled = !connected || !msg.trim() || busy;
 
-  async function pickWallet(id: WalletId) {
+  async function pickWallet(id: WalletId | "trustwallet") {
     setPickerOpen(false);
     const w = WALLETS.find((x) => x.id === id)!;
 
@@ -358,7 +323,7 @@ export default function App() {
                 Prove wallet ownership<br/><span className="text-sky-400">by signing a message</span>.
               </h1>
               <p className="mt-4 text-slate-300/90 leading-relaxed">
-                Works with Phantom, Solflare, Backpack, Glow, Exodus and more.
+                Works with Phantom, Solflare, Backpack, Glow, Exodus, TrustWallet and more.
                 No passwords, no email—just cryptographic proof.
               </p>
               <ul className="mt-6 space-y-2 text-slate-300/80 text-sm">
@@ -447,12 +412,19 @@ export default function App() {
         <div className="mx-auto max-w-6xl px-4 py-6 text-sm text-slate-400 flex flex-wrap items-center justify-between gap-3">
           <span>© {new Date().getFullYear()} SolanaSign</span>
           <div className="flex items-center gap-4">
-            <a className="hover:text-slate-200" href="https://github.com/mjukilo/solanasign.io">GitHub</a>
+            <a
+              className="hover:text-slate-200"
+              href="https://github.com/mjukilo/solanasign.io"
+              target="_blank"
+              rel="nofollow noopener noreferrer"
+            >
+              GitHub
+            </a>
 
-            {/* Lien "Use cases" qui ouvre le modal */}
+            {/* Lien "Use cases" caché pour le futur */}
             <button
               onClick={() => setShowUseCasesModal(true)}
-              className="hover:text-slate-200 underline decoration-dotted"
+              className="hidden hover:text-slate-200 underline decoration-dotted"
               title="Open use cases"
             >
               Use cases
@@ -469,30 +441,30 @@ export default function App() {
             className="relative mx-auto mt-24 w-[92%] max-w-md rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="border-b border-slate-800 px-5 py-4 text-sm font-semibold">Choose a wallet</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3">
+            <div className="border-b border-slate-800 px-5 py-4 text-sm font-semibold">Select a wallet</div>
+            <ul className="divide-y divide-slate-800">
               {WALLETS.map((w) => (
-                <button
+                <li
                   key={w.id}
+                  className="flex items-center justify-between px-5 py-3 hover:bg-slate-800/50 cursor-pointer transition"
                   onClick={() => pickWallet(w.id)}
-                  className="flex items-center gap-3 rounded-xl border border-slate-700/70 bg-slate-800/50 px-3 py-3 text-left hover:bg-slate-800 transition"
                 >
-                  <img src={w.icon} alt={w.label} className="h-7 w-7 rounded-md object-contain" />
-                  <div>
-                    <div className="text-sm font-medium">{w.label}</div>
-                    <div className="text-xs text-slate-400">{w.subtitle}</div>
+                  <div className="flex items-center gap-3">
+                    <img src={w.icon} alt={w.label} className="h-6 w-6" />
+                    <div>
+                      <p className="font-medium">{w.label}</p>
+                      <p className="text-xs text-slate-400">{w.subtitle}</p>
+                    </div>
                   </div>
-                </button>
+                  <span className="text-xs text-sky-400">Connect</span>
+                </li>
               ))}
-            </div>
-            <div className="px-5 pb-4 pt-2 text-xs text-slate-400">
-              Mobile tip: open this page inside your wallet's in-app browser.
-            </div>
+            </ul>
           </div>
         </div>
       )}
 
-      {/* MODAL "Use cases" */}
+      {/* MODAL "USE CASES" (hidden trigger) */}
       {showUseCasesModal && (
         <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" onClick={() => setShowUseCasesModal(false)}>
           <div className="absolute inset-0 bg-black/60" />
@@ -509,17 +481,16 @@ export default function App() {
                 Close
               </button>
             </div>
-
             <div className="m-4 text-sm text-slate-300 space-y-3">
               <p className="text-slate-200 font-medium">Common use cases</p>
               <ul className="list-disc pl-5 space-y-1">
-                <li>Prove ownership of a wallet (KYC-less login, support, community gates)</li>
-                <li>Bind a wallet to a user account (account linking)</li>
-                <li>Anti-fraud: sign challenges containing timestamp + domain (replay protection)</li>
-                <li>Off-chain authorization for premium features or allow-lists</li>
+                <li>Prove ownership of a wallet</li>
+                <li>Bind a wallet to a user account</li>
+                <li>Anti-fraud challenges with timestamp + domain</li>
+                <li>Off-chain authorization (premium features / allow-lists)</li>
               </ul>
               <p className="text-slate-400 text-xs">
-                Tip: always verify the signature over the exact same message bytes (UTF-8) and decode signature from base58.
+                Tip: always verify signature over the same message bytes (UTF-8) and decode from base58.
               </p>
             </div>
           </div>
