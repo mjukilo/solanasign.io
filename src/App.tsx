@@ -54,47 +54,7 @@ function scanGlow(): any | null {
   return null;
 }
 
-/** ✅ Scan Trust Wallet (gère plusieurs variantes d'injection) */
-function scanTrustWallet(): any | null {
-  const w = window as any;
-
-  // Injections directes possibles
-  if (w.trustwallet?.solana) return w.trustwallet.solana;
-  if (w.trustwallet) return w.trustwallet;
-  if (w.trustWallet?.solana) return w.trustWallet.solana;
-  if (w.trustWallet) return w.trustWallet;
-
-  // Multi-providers (ex: window.solana.providers)
-  const sol = w.solana;
-  const providers: any[] = Array.isArray(sol?.providers) ? sol.providers : [];
-  if (providers.length) {
-    const byFlag = providers.find((p) => p?.isTrust || p?.isTrustWallet);
-    if (byFlag) return byFlag;
-    const byName = providers.find(
-      (p) =>
-        p?.name === "Trust Wallet" ||
-        p?.wallet === "Trust Wallet" ||
-        p?.provider === "Trust Wallet" ||
-        p?.name === "Trust"
-    );
-    if (byName) return byName;
-  }
-
-  // Provider unique
-  if (sol?.isTrust || sol?.isTrustWallet) return sol;
-  if (
-    sol &&
-    (sol.name === "Trust Wallet" ||
-      sol.wallet === "Trust Wallet" ||
-      sol.provider === "Trust Wallet" ||
-      sol.name === "Trust")
-  )
-    return sol;
-
-  return null;
-}
-
-/** Deep link + polling: comme dans le ZIP */
+/** Deep link + polling: comme dans le ZIP (Glow) */
 async function deepLinkAndWaitGlow(timeoutMs = 5000): Promise<any | null> {
   try {
     let p = scanGlow();
@@ -112,6 +72,24 @@ async function deepLinkAndWaitGlow(timeoutMs = 5000): Promise<any | null> {
   } catch {
     return null;
   }
+}
+
+/** Deep links Phantom / Solflare (mobile only) */
+function createDeepLink(type: "phantom" | "solflare", message: string) {
+  const baseUrl = window.location.href;
+  const params = new URLSearchParams({
+    message: encodeURIComponent(message),
+    redirect: encodeURIComponent(baseUrl),
+  });
+
+  return type === "phantom"
+    ? `https://phantom.app/ul/v1/signMessage?${params.toString()}`
+    : `https://solflare.com/ul/v1/signMessage?${params.toString()}`;
+}
+
+function openDeepLink(type: "phantom" | "solflare", message: string) {
+  const deepLink = createDeepLink(type, message);
+  window.location.href = deepLink;
 }
 
 /** compat de connexion: avec/sans options, puis request() */
@@ -183,7 +161,13 @@ const WALLETS: {
     id: "trustwallet",
     label: "Trust Wallet",
     icon: trustwalletIcon,
-    detect: () => scanTrustWallet(),
+    detect: () => {
+      const w = window as any;
+      const t = w.trustwallet;
+      if (!t) return null;
+      // handle t.solana or provider-like object
+      return t.solana ?? t;
+    },
     install: () =>
       window.open("https://trustwallet.com/browser-extension", "_blank"),
     subtitle: "Extension only",
@@ -228,6 +212,14 @@ export default function App() {
 
   async function pickWallet(id: WalletId | "trustwallet") {
     setPickerOpen(false);
+
+    // 📱 Mobile-only deep links for Phantom & Solflare
+    if (isMobile && (id === "phantom" || id === "solflare")) {
+      const message = msg.trim() || `I am proving I own this wallet on ${new Date().toISOString()}`;
+      openDeepLink(id, message);
+      return; // stop here; deep link takes over
+    }
+
     const w = WALLETS.find((x) => x.id === id)!;
 
     let p = w.detect();
@@ -497,6 +489,9 @@ export default function App() {
                 </li>
               ))}
             </ul>
+            <div className="px-5 pb-4 pt-2 text-xs text-slate-400">
+              Mobile tip: open this page inside your wallet's in-app browser.
+            </div>
           </div>
         </div>
       )}
