@@ -165,7 +165,6 @@ const WALLETS: {
       const w = window as any;
       const t = w.trustwallet;
       if (!t) return null;
-      // handle t.solana or provider-like object
       return t.solana ?? t;
     },
     install: () =>
@@ -213,20 +212,26 @@ export default function App() {
   async function pickWallet(id: WalletId | "trustwallet") {
     setPickerOpen(false);
 
-    // 📱 Mobile-only deep links for Phantom & Solflare
-    if (isMobile && (id === "phantom" || id === "solflare")) {
-      const message = msg.trim() || `I am proving I own this wallet on ${new Date().toISOString()}`;
-      openDeepLink(id, message);
-      return; // stop here; deep link takes over
-    }
-
     const w = WALLETS.find((x) => x.id === id)!;
 
+    // 1) Toujours essayer de détecter un provider injecté (y compris in-app browsers)
     let p = w.detect();
+
+    // 2) Si Glow non détecté, tenter le deep link + polling
     if (!p && id === "glow") {
       p = await deepLinkAndWaitGlow(5000);
     }
 
+    // 3) Si toujours rien ET on est sur mobile ET wallet supporte un deep link de signMessage => alors deep link
+    //    (⚠️ On NE le fait PAS si un provider est présent, donc in-app browsers restent OK)
+    if (!p && isMobile && (id === "phantom" || id === "solflare")) {
+      const message =
+        msg.trim() || `I am proving I own this wallet on ${new Date().toISOString()}`;
+      openDeepLink(id, message);
+      return; // le deep link prend la main
+    }
+
+    // 4) Si toujours rien -> proposer l’installation
     if (!p) {
       w.install();
       return;
